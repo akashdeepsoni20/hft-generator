@@ -2,65 +2,383 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>HFT Tracker Sync</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HFT Bulk Deal → Pine Script Generator</title>
+  <!-- Select2 CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
   <style>
-    body { background: #0d1117; color: #c9d1d9; font-family: sans-serif; margin: 0; padding: 24px; }
-    .container { max-width: 900px; margin: 0 auto; }
-    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 10px; }
-    h1 { font-size: 18px; color: #58a6ff; margin: 0; }
-    .controls { display: flex; gap: 8px; }
-    input { background: #161b22; border: 1px solid #30363d; color: white; padding: 8px 12px; border-radius: 6px; text-transform: uppercase; }
-    button { background: #238636; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 600; }
-    button:hover { background: #2ea043; }
-    textarea { width: 100%; height: 550px; background: #161b22; color: #7ee787; border: 1px solid #30363d; border-radius: 6px; padding: 14px; font-family: monospace; font-size: 13px; box-sizing: border-box; }
+    * { box-sizing: border-box; }
+    body {
+      background: #0d1117;
+      color: #c9d1d9;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+      margin: 0;
+      padding: 24px 16px;
+      display: flex;
+      justify-content: center;
+    }
+    .container {
+      width: 100%;
+      max-width: 960px;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .title-area h1 {
+      font-size: 20px;
+      color: #58a6ff;
+      margin: 0 0 4px 0;
+      font-weight: 700;
+    }
+    .title-area p {
+      margin: 0;
+      font-size: 13px;
+      color: #8b949e;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      background: #161b22;
+      border: 1px solid #30363d;
+      color: #7ee787;
+    }
+    .badge.loading {
+      color: #e3b341;
+    }
+
+    .card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #c9d1d9;
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    /* Select2 Dark Theme Styling */
+    .select2-container--default .select2-selection--multiple {
+      background-color: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      min-height: 42px;
+      padding: 3px 6px;
+      color: #c9d1d9;
+    }
+    .select2-container--default.select2-container--focus .select2-selection--multiple {
+      border-color: #58a6ff;
+    }
+    .select2-container--default .select2-selection--multiple .select2-selection__choice {
+      background-color: #1f6feb;
+      border: 1px solid #388bfd;
+      color: #ffffff;
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 13px;
+      font-weight: 500;
+      margin-top: 4px;
+    }
+    .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+      color: #ffffff;
+      margin-right: 6px;
+      font-weight: bold;
+    }
+    .select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
+      color: #f85149;
+    }
+    .select2-container--default .select2-search--inline .select2-search__field {
+      color: #c9d1d9;
+      font-family: inherit;
+      margin-top: 6px;
+    }
+    .select2-dropdown {
+      background-color: #161b22;
+      border: 1px solid #30363d;
+      color: #c9d1d9;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+    .select2-container--default .select2-results__option {
+      padding: 8px 12px;
+      font-size: 13px;
+    }
+    .select2-container--default .select2-results__option--highlighted[aria-selected] {
+      background-color: #1f6feb;
+      color: #ffffff;
+    }
+    .select2-container--default .select2-results__option[aria-selected=true] {
+      background-color: #21262d;
+      color: #8b949e;
+    }
+
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+      align-items: center;
+    }
+
+    button {
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-primary {
+      background: #238636;
+      color: #ffffff;
+      border-color: #2ea043;
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: #2ea043;
+    }
+
+    .btn-secondary {
+      background: #21262d;
+      color: #c9d1d9;
+      border-color: #30363d;
+    }
+    .btn-secondary:hover:not(:disabled) {
+      background: #30363d;
+      color: #ffffff;
+    }
+
+    .btn-copy {
+      background: #1f6feb;
+      color: #ffffff;
+      border-color: #388bfd;
+      margin-left: auto;
+    }
+    .btn-copy:hover:not(:disabled) {
+      background: #388bfd;
+    }
+    .btn-copy.copied {
+      background: #238636;
+      border-color: #2ea043;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .output-card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .output-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 16px;
+      background: #21262d;
+      border-bottom: 1px solid #30363d;
+      font-size: 12px;
+      color: #8b949e;
+    }
+    .output-meta {
+      display: flex;
+      gap: 16px;
+    }
+    textarea {
+      width: 100%;
+      height: 520px;
+      background: #0d1117;
+      color: #7ee787;
+      border: none;
+      padding: 16px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 12.5px;
+      line-height: 1.55;
+      box-sizing: border-box;
+      resize: vertical;
+      outline: none;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <h1>HFT Bulk Deal &rarr; Pine Script</h1>
-      <div class="controls">
-        <input type="text" id="symInput" placeholder="Symbol (e.g. ANTELOPUS)" />
-        <button onclick="fetchData()">Filter Stock</button>
-        <button onclick="fetchAll()">Show All</button>
-        <button id="copyBtn" onclick="copyCode()">Copy Code</button>
+      <div class="title-area">
+        <h1>HFT Bulk Deal &rarr; Pine Script Generator</h1>
+        <p>Generates compact, high-speed TradingView indicator scripts for 12 tracked HFT & Algo Desks</p>
+      </div>
+      <div id="statusBadge" class="badge loading">
+        Loading stocks...
       </div>
     </div>
-    <textarea id="output" readonly placeholder="Click Filter Stock or Show All..."></textarea>
+
+    <div class="card">
+      <label for="stockSelect">Choose Stocks (Search or Multi-Select):</label>
+      <select id="stockSelect" multiple style="width: 100%;">
+        <!-- Populated dynamically from API -->
+      </select>
+
+      <div class="btn-row">
+        <button id="btnGenerate" class="btn-primary" onclick="generateScript()">
+          ⚡ Generate Pine Script
+        </button>
+        <button class="btn-secondary" onclick="selectAll()">Select All</button>
+        <button class="btn-secondary" onclick="clearAll()">Clear</button>
+        <button id="btnCopy" class="btn-copy" onclick="copyCode()">
+          📋 Copy Code
+        </button>
+      </div>
+    </div>
+
+    <div class="output-card">
+      <div class="output-header">
+        <div class="output-meta">
+          <span id="scriptStats">Pine Script v5 Indicator</span>
+        </div>
+        <div id="copyNotice" style="color: #7ee787; display: none;">✓ Copied to clipboard!</div>
+      </div>
+      <textarea id="output" readonly placeholder="Select stocks above and click 'Generate Pine Script' to view TradingView Pine Script code..."></textarea>
+    </div>
   </div>
 
+  <!-- jQuery & Select2 Scripts -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
   <script>
-    async function loadData(url) {
-      const area = document.getElementById("output");
-      area.value = "Fetching data...";
+    let allSymbols = [];
+
+    $(document).ready(function() {
+      $('#stockSelect').select2({
+        placeholder: "Search and select stocks (e.g. 5PAISA, ANGELONE)...",
+        allowClear: true,
+        closeOnSelect: false
+      });
+
+      initSymbols();
+    });
+
+    async function initSymbols() {
+      const badge = document.getElementById("statusBadge");
       try {
-        const res = await fetch(url);
-        area.value = await res.text();
+        badge.className = "badge loading";
+        badge.innerText = "Fetching stocks from Azure Blob...";
+        
+        const res = await fetch("/api/generate?action=symbols");
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const data = await res.json();
+        
+        allSymbols = data.symbols || [];
+        const select = $('#stockSelect');
+        select.empty();
+
+        allSymbols.forEach(sym => {
+          select.append(new Option(sym, sym, false, false));
+        });
+
+        badge.className = "badge";
+        badge.innerText = `✓ ${allSymbols.length} stocks available (12 Desks)`;
+
+        // Pre-select first 3 stocks if available to provide an instant demo script
+        if (allSymbols.length > 0) {
+          const defaults = allSymbols.slice(0, 3);
+          select.val(defaults).trigger('change');
+          generateScript();
+        }
       } catch (err) {
-        area.value = "Error: " + err;
+        console.error("Failed to load symbols:", err);
+        badge.className = "badge loading";
+        badge.innerText = "Error loading symbols";
+        document.getElementById("output").value = "// Error loading stock list from server: " + err.message + "\n// Please try refreshing the page.";
       }
     }
 
-    function fetchData() {
-      const sym = document.getElementById("symInput").value.trim().toUpperCase();
-      loadData(sym ? `/api/generate?symbol=${encodeURIComponent(sym)}` : "/api/generate");
+    function selectAll() {
+      $('#stockSelect').val(allSymbols).trigger('change');
     }
 
-    function fetchAll() {
-      document.getElementById("symInput").value = "";
-      loadData("/api/generate");
+    function clearAll() {
+      $('#stockSelect').val([]).trigger('change');
+      document.getElementById("output").value = "";
+      document.getElementById("scriptStats").innerText = "Pine Script v5 Indicator";
+    }
+
+    async function generateScript() {
+      const selected = $('#stockSelect').val() || [];
+      const area = document.getElementById("output");
+      const genBtn = document.getElementById("btnGenerate");
+      const stats = document.getElementById("scriptStats");
+
+      if (selected.length === 0) {
+        alert("Please select at least one stock to generate script!");
+        return;
+      }
+
+      genBtn.disabled = true;
+      genBtn.innerText = "⏳ Generating...";
+      area.value = "Fetching and compiling Pine Script for " + selected.length + " stock(s)...";
+
+      try {
+        const query = selected.length === allSymbols.length 
+          ? "/api/generate?symbols=ALL" 
+          : "/api/generate?symbols=" + encodeURIComponent(selected.join(","));
+
+        const res = await fetch(query);
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(errText || ("HTTP " + res.status));
+        }
+
+        const script = await res.text();
+        area.value = script;
+        stats.innerText = `Pine Script v5 | ${selected.length} Stock(s) | ${script.length.toLocaleString()} characters`;
+      } catch (err) {
+        area.value = "// Error generating Pine Script: " + err.message;
+      } finally {
+        genBtn.disabled = false;
+        genBtn.innerText = "⚡ Generate Pine Script";
+      }
     }
 
     function copyCode() {
       const area = document.getElementById("output");
+      if (!area.value) return;
       area.select();
       navigator.clipboard.writeText(area.value);
-      const btn = document.getElementById("copyBtn");
-      btn.innerText = "Copied!";
-      setTimeout(() => btn.innerText = "Copy Code", 1500);
-    }
 
-    fetchAll();
+      const btn = document.getElementById("btnCopy");
+      const notice = document.getElementById("copyNotice");
+
+      btn.classList.add("copied");
+      btn.innerText = "✓ Copied!";
+      notice.style.display = "block";
+
+      setTimeout(() => {
+        btn.classList.remove("copied");
+        btn.innerText = "📋 Copy Code";
+        notice.style.display = "none";
+      }, 2000);
+    }
   </script>
 </body>
 </html>
