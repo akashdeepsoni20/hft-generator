@@ -58,15 +58,14 @@ class handler(BaseHTTPRequestHandler):
 
             for _, row in grouped.iterrows():
                 dt = row["ParsedDate"]
-                # Store timestamp integer directly
                 t_val = int(pd.Timestamp(dt).timestamp() * 1000)
                 sym_list.append(row["CleanSym"])
                 time_list.append(str(t_val))
                 count_list.append(str(len(row["Matched_HFT"])))
                 firm_list.append("\\n".join(row["Matched_HFT"]))
 
-            # Chunk into safe multi-line string constants to avoid token limits
-            max_line_len = 15000
+            # Chunk into safe multi-line string constants (Max Pine string length is 4096)
+            max_line_len = 3500
             def make_chunked_str(lst):
                 full_str = ",".join(lst)
                 chunks = [full_str[i:i+max_line_len] for i in range(0, len(full_str), max_line_len)]
