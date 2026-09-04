@@ -65,33 +65,117 @@ class handler(BaseHTTPRequestHandler):
                 count_list.append(str(len(row["Matched_HFT"])))
                 firm_list.append("\\n".join(row["Matched_HFT"]))
 
-            # Strict character-budget chunking (max 500 chars per literal to stay safely below 4096)
-            def make_safe_chunked_str(lst, max_chars=500):
+            # Safe chunk generator (max 1500 chars per literal to stay well below 4096)
+            def make_indexed_vars(lst, prefix, max_chars=1500):
                 chunks = []
                 current_batch = []
                 current_len = 0
                 for item in lst:
                     item_str = str(item)
-                    item_len = len(item_str) + 1  # +1 for comma separator
+                    item_len = len(item_str) + 1
                     if current_len + item_len > max_chars and current_batch:
-                        chunks.append(f'"{",".join(current_batch)}"')
+                        chunks.append(",".join(current_batch))
                         current_batch = [item_str]
                         current_len = item_len
                     else:
                         current_batch.append(item_str)
                         current_len += item_len
                 if current_batch:
-                    chunks.append(f'"{",".join(current_batch)}"')
-                return ' + \n         '.join(chunks)
+                    chunks.append(",".join(current_batch))
+                
+                output_lines = []
+                for idx, chunk in enumerate(chunks):
+                    output_lines.append(f'    {prefix}{idx+1} = "{chunk}"')
+                return output_lines
 
-            lines = [
-                f'sData = {make_safe_chunked_str(sym_list)}',
-                f'tData = {make_safe_chunked_str(time_list)}',
-                f'cData = {make_safe_chunked_str(count_list)}',
-                f'fData = {make_safe_chunked_str(firm_list)}'
+            s_chunks = make_indexed_vars(sym_list, "s")
+            t_chunks = make_indexed_vars(time_list, "t")
+            c_chunks = make_indexed_vars(count_list, "c")
+            f_chunks = make_indexed_vars(firm_list, "f")
+
+            # Assemble the complete Pine Script code block programmatically
+            script_lines = [
+                '//@version=5',
+                'indicator("HFT Universal Bulk Tracker", overlay=true, max_labels_count=500)',
+                '',
+                'f_split(str) =>',
+                '    string[] res = array.new_string(0)',
+                '    int start = 0',
+                '    int len = str.length(str)',
+                '    for i = 0 to len - 1',
+                '        if str.substring(str, i, i + 1) == ","',
+                '            array.push(res, str.substring(str, start, i))',
+                '            start := i + 1',
+                '    if start <= len',
+                '        array.push(res, str.substring(str, start, len))',
+                '    res',
+                '',
+                'var int[]    dealTimes = array.new_int(0)',
+                'var int[]    dealCount = array.new_int(0)',
+                'var string[] dealFirms = array.new_string(0)',
+                '',
+                'if barstate.isfirst',
+                '    string curSym = str.upper(syminfo.ticker)',
+                '    int colonPos = str.pos(curSym, ":")',
+                '    if colonPos >= 0',
+                '        curSym := str.substring(curSym, colonPos + 1)',
+                ''
             ]
 
-            output = "\n".join(lines)
+            script_lines.extend(s_chunks)
+            script_lines.append('')
+            script_lines.extend(t_chunks)
+            script_lines.append('')
+            script_lines.extend(c_chunks)
+            script_lines.append('')
+            script_lines.extend(f_chunks)
+
+            script_lines.extend([
+                '',
+                '    string[] sArr = array.new_string(0)',
+                '    string[] tArr = array.new_string(0)',
+                '    string[] cArr = array.new_string(0)',
+                '    string[] fArr = array.new_string(0)',
+                ''
+            ])
+
+            for i in range(len(s_chunks)):
+                script_lines.append(f'    array.concat(sArr, f_split(s{i+1}))')
+            for i in range(len(t_chunks)):
+                script_lines.append(f'    array.concat(tArr, f_split(t{i+1}))')
+            for i in range(len(c_chunks)):
+                script_lines.append(f'    array.concat(cArr, f_split(c{i+1}))')
+            for i in range(len(f_chunks)):
+                script_lines.append(f'    array.concat(fArr, f_split(f{i+1}))')
+
+            script_lines.extend([
+                '',
+                '    for i = 0 to array.size(sArr) - 1',
+                '        if array.get(sArr, i) == curSym',
+                '            array.push(dealTimes, int(str.tonumber(array.get(tArr, i))))',
+                '            array.push(dealCount, int(str.tonumber(array.get(cArr, i))))',
+                '            array.push(dealFirms, array.get(fArr, i))',
+                '',
+                'int curBarDayStart = timestamp("UTC", year(time, syminfo.timezone), month(time, syminfo.timezone), dayofmonth(time, syminfo.timezone), 0, 0, 0)',
+                'int dealIdx = array.size(dealTimes) > 0 ? array.binary_search(dealTimes, curBarDayStart) : -1',
+                'color hftBgColor = na',
+                '',
+                'if dealIdx >= 0',
+                '    bool shouldPlotLabel = timeframe.isdaily or (timeframe.isintraday and ta.change(time("D")))',
+                '    int    tCount = array.get(dealCount, dealIdx)',
+                '    string fList  = array.get(dealFirms, dealIdx)',
+                '    string lblSz = tCount >= 6 ? size.large : tCount >= 3 ? size.normal : size.small',
+                '    color  cCol  = tCount >= 6 ? #00E676 : #2E7D32',
+                '    hftBgColor := color.new(cCol, 85)',
+                '',
+                '    if shouldPlotLabel',
+                '        string tip = "HFT BULK DEAL\\nStock: " + syminfo.ticker + "\\nDate: " + str.format_time(time, "dd-MM-yyyy", syminfo.timezone) + "\\nTraders: " + str.tostring(tCount) + " of 12\\n----\\n" + fList',
+                '        label.new(x=bar_index, y=low, text="▲" + str.tostring(tCount), style=label.style_label_up, color=cCol, textcolor=color.white, size=lblSz, tooltip=tip)',
+                '',
+                'bgcolor(hftBgColor, title="HFT Cluster Day")'
+            ])
+
+            output = "\n".join(script_lines)
 
             self.send_response(200)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
