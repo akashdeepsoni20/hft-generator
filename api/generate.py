@@ -62,21 +62,21 @@ class handler(BaseHTTPRequestHandler):
                 sym_list.append(row["CleanSym"])
                 time_list.append(str(t_val))
                 count_list.append(str(len(row["Matched_HFT"])))
-                firm_list.append("\\n".join(row["Matched_HFT"]))
+                # Escape backslashes properly for Pine Script strings
+                firms_joined = "\\n".join(row["Matched_HFT"])
+                firm_list.append(firms_joined)
 
-            # Chunk into safe multi-line string constants (Max Pine string length is 4096)
-            max_line_len = 3500
-            def make_chunked_str(lst):
-                full_str = ",".join(lst)
-                chunks = [full_str[i:i+max_line_len] for i in range(0, len(full_str), max_line_len)]
-                joined = ' + \n         '.join([f'"{c}"' for c in chunks])
-                return joined
+            # Chunk by items (e.g., 50 items per chunk) to stay well under Pine's 4096 char string limit safely
+            def make_item_chunked_str(lst, batch_size=40):
+                batches = [lst[i:i+batch_size] for i in range(0, len(lst), batch_size)]
+                batch_strs = [f'"{",".join(batch)}"' for batch in batches]
+                return ' + \n         '.join(batch_strs)
 
             lines = [
-                f'sData = {make_chunked_str(sym_list)}',
-                f'tData = {make_chunked_str(time_list)}',
-                f'cData = {make_chunked_str(count_list)}',
-                f'fData = {make_chunked_str(firm_list)}'
+                f'sData = {make_item_chunked_str(sym_list)}',
+                f'tData = {make_item_chunked_str(time_list)}',
+                f'cData = {make_item_chunked_str(count_list)}',
+                f'fData = {make_item_chunked_str(firm_list)}'
             ]
 
             output = "\n".join(lines)
