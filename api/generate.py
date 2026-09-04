@@ -51,36 +51,34 @@ class handler(BaseHTTPRequestHandler):
 
             grouped = hft_df.groupby(["CleanSym", "ParsedDate"])["Matched_HFT"].unique().reset_index()
 
-            symbols = sorted(grouped["CleanSym"].unique())
-            chunk_size = 35  # Keep each switch block small to prevent compiler limits
-            symbol_chunks = [symbols[i:i + chunk_size] for i in range(0, len(symbols), chunk_size)]
+            sym_list = []
+            time_list = []
+            count_list = []
+            firm_list = []
 
-            lines = []
-            
-            # 1. Generate chunk functions
-            for idx, chunk in enumerate(symbol_chunks):
-                func_name = f"load_batch_{idx+1}"
-                lines.append(f"f_{func_name}(curSym, dtArr, cntArr, firmsArr) =>")
-                lines.append(f"    switch curSym")
-                for sym in chunk:
-                    lines.append(f'        "{sym}" =>')
-                    group = grouped[grouped["CleanSym"] == sym]
-                    for _, row in group.iterrows():
-                        dt = row["ParsedDate"]
-                        firms = list(row["Matched_HFT"])
-                        count = len(firms)
-                        firms_str = "\\n".join(firms)
-                        lines.append(f'            f_add(dtArr, cntArr, firmsArr, {dt.year}, {dt.month}, {dt.day}, {count}, "{firms_str}")')
-                lines.append("")
+            for _, row in grouped.iterrows():
+                dt = row["ParsedDate"]
+                # Store timestamp integer directly
+                t_val = int(pd.Timestamp(dt).timestamp() * 1000)
+                sym_list.append(row["CleanSym"])
+                time_list.append(str(t_val))
+                count_list.append(str(len(row["Matched_HFT"])))
+                firm_list.append("\\n".join(row["Matched_HFT"]))
 
-            # 2. Generate the main execution block for barstate.isfirst
-            lines.append("if barstate.isfirst")
-            lines.append("    string curSym = str.upper(syminfo.ticker)")
-            lines.append("    int colonPos = str.pos(curSym, \":\")")
-            lines.append("    if colonPos >= 0")
-            lines.append("        curSym := str.substring(curSym, colonPos + 1)")
-            for idx in range(len(symbol_chunks)):
-                lines.append(f"    f_load_batch_{idx+1}(curSym, dealTimes, dealCount, dealFirms)")
+            # Chunk into safe multi-line string constants to avoid token limits
+            max_line_len = 15000
+            def make_chunked_str(lst):
+                full_str = ",".join(lst)
+                chunks = [full_str[i:i+max_line_len] for i in range(0, len(full_str), max_line_len)]
+                joined = ' + \n         '.join([f'"{c}"' for c in chunks])
+                return joined
+
+            lines = [
+                f'sData = {make_chunked_str(sym_list)}',
+                f'tData = {make_chunked_str(time_list)}',
+                f'cData = {make_chunked_str(count_list)}',
+                f'fData = {make_chunked_str(firm_list)}'
+            ]
 
             output = "\n".join(lines)
 
