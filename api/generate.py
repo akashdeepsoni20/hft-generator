@@ -43,13 +43,18 @@ def fetch_and_process_hft_data():
     date_col = next(c for c in df.columns if "date" in c.lower())
     symbol_col = next(c for c in df.columns if "symbol" in c.lower())
     client_col = next(c for c in df.columns if "client" in c.lower())
+    bs_col = next((c for c in df.columns if "buy" in c.lower() or "sell" in c.lower()), None)
 
     df["CleanSym"] = df[symbol_col].astype(str).str.strip().str.upper()
     df["Matched_HFT"] = df[client_col].apply(match_hft)
 
     hft_df = df.dropna(subset=["Matched_HFT"]).copy()
-    
-    # Try standard format first, fallback to mixed
+
+    # Filter strictly to BUY deals so only institutional HFT accumulation is tracked
+    if bs_col:
+        hft_df = hft_df[hft_df[bs_col].astype(str).str.upper().str.strip() == "BUY"].copy()
+
+    # Optimized date parsing
     try:
         hft_df["ParsedDate"] = pd.to_datetime(hft_df[date_col], format="%d-%b-%y", errors="coerce")
     except Exception:
@@ -62,7 +67,7 @@ def fetch_and_process_hft_data():
         .agg(lambda x: sorted(list(set(x))))
         .reset_index()
     )
-    grouped = grouped.sort_values(by="ParsedDate")
+    grouped = grouped.sort_values(by=["CleanSym", "ParsedDate"])
     return grouped
 
 
@@ -70,135 +75,484 @@ def generate_pinescript(grouped, selected_syms=None):
     if selected_syms and "ALL" not in [s.upper() for s in selected_syms]:
         selected_set = set(s.upper() for s in selected_syms)
         filtered_group = grouped[grouped["CleanSym"].isin(selected_set)]
-        title_tag = f"({len(selected_set)} Stocks)"
+        title_tag = f"({', '.join(sorted(selected_set))})"
     else:
         filtered_group = grouped
         title_tag = "(All Tracked Stocks)"
 
-    sym_list, time_list, count_list, firm_list = [], [], [], []
-    for _, row in filtered_group.iterrows():
-        dt = row["ParsedDate"]
-        t_val = int(pd.Timestamp(dt).timestamp() * 1000)
-        sym_list.append(row["CleanSym"])
-        time_list.append(str(t_val))
-        count_list.append(str(len(row["Matched_HFT"])))
-        firm_list.append("\\n".join(row["Matched_HFT"]))
-
-    if not sym_list:
+    symbols_in_data = sorted(filtered_group["CleanSym"].unique().tolist())
+    if not symbols_in_data:
         return f"""//@version=5
-indicator("HFT Custom Tracker {title_tag}", overlay=true)
-// No bulk deals found for the selected symbols in tracked desks.
+indicator("HFT + V20 Confluence Engine {title_tag}", overlay=true)
+// No HFT bulk BUY deals found for the selected symbols.
 """
 
-    def make_indexed_vars(lst, prefix, max_chars=1200):
-        chunks = []
-        current_batch = []
-        current_len = 0
-        for item in lst:
-            item_str = str(item)
-            item_len = len(item_str) + 1
-            if current_len + item_len > max_chars and current_batch:
-                chunks.append(",".join(current_batch))
-                current_batch = [item_str]
-                current_len = item_len
-            else:
-                current_batch.append(item_str)
-                current_len += item_len
-        if current_batch:
-            chunks.append(",".join(current_batch))
+    stock_branches = []
+    first = True
+    BATCH_SIZE = 40
 
-        output_lines = []
-        for idx, chunk in enumerate(chunks):
-            output_lines.append(f'    {prefix}{idx+1} = "{chunk}"')
-        return output_lines, len(chunks)
+    for sym in symbols_in_data:
+        sub = filtered_group[filtered_group["CleanSym"] == sym].sort_values(by="ParsedDate")
+        if sub.empty:
+            continue
 
-    s_chunks, s_cnt = make_indexed_vars(sym_list, "s")
-    t_chunks, t_cnt = make_indexed_vars(time_list, "t")
-    c_chunks, c_cnt = make_indexed_vars(count_list, "c")
-    f_chunks, f_cnt = make_indexed_vars(firm_list, "f")
+        keyword = "if" if first else "else if"
+        first = False
 
-    script_lines = [
-        "//@version=5",
-        f'indicator("HFT Custom Tracker {title_tag}", overlay=true, max_labels_count=500)',
-        "",
-        "f_split(str) =>",
-        "    string[] res = array.new_string(0)",
-        "    int start = 0",
-        "    int len = str.length(str)",
-        "    for i = 0 to len - 1",
-        '        if str.substring(str, i, i + 1) == ","',
-        "            array.push(res, str.substring(str, start, i))",
-        "            start := i + 1",
-        "    if start <= len",
-        "        array.push(res, str.substring(str, start, len))",
-        "    res",
-        "",
-        "var int[]    dealTimes = array.new_int(0)",
-        "var int[]    dealCount = array.new_int(0)",
-        "var string[] dealFirms = array.new_string(0)",
-        "",
-        "if barstate.isfirst",
-        "    string curSym = str.upper(syminfo.ticker)",
-        '    int colonPos = str.pos(curSym, ":")',
-        "    if colonPos >= 0",
-        "        curSym := str.substring(curSym, colonPos + 1)",
-        "",
-    ]
+        t_list = [str(int(pd.Timestamp(dt).timestamp() * 1000)) for dt in sub["ParsedDate"]]
+        c_list = [str(len(f)) for f in sub["Matched_HFT"]]
+        f_list = ["\\n".join(f) for f in sub["Matched_HFT"]]
 
-    script_lines.extend(s_chunks)
-    script_lines.append("")
-    script_lines.extend(t_chunks)
-    script_lines.append("")
-    script_lines.extend(c_chunks)
-    script_lines.append("")
-    script_lines.extend(f_chunks)
+        stock_branches.append(f'    {keyword} curSym == "{sym}"')
+        for b_idx in range(0, len(t_list), BATCH_SIZE):
+            b_t = ",".join(t_list[b_idx:b_idx + BATCH_SIZE])
+            b_c = ",".join(c_list[b_idx:b_idx + BATCH_SIZE])
+            b_f = "~".join(f_list[b_idx:b_idx + BATCH_SIZE])
+            stock_branches.append(f'        f_loadData(dealTimes, dealCount, dealFirms, "{b_t}", "{b_c}", "{b_f}")')
 
-    script_lines.extend([
-        "",
-        "    string[] sArr = array.new_string(0)",
-        "    string[] tArr = array.new_string(0)",
-        "    string[] cArr = array.new_string(0)",
-        "    string[] fArr = array.new_string(0)",
-        "",
-    ])
+    data_loading_block = "\n".join(stock_branches)
 
-    for i in range(s_cnt):
-        script_lines.append(f"    array.concat(sArr, f_split(s{i+1}))")
-    for i in range(t_cnt):
-        script_lines.append(f"    array.concat(tArr, f_split(t{i+1}))")
-    for i in range(c_cnt):
-        script_lines.append(f"    array.concat(cArr, f_split(c{i+1}))")
-    for i in range(f_cnt):
-        script_lines.append(f"    array.concat(fArr, f_split(f{i+1}))")
+    script = f"""//@version=5
+indicator("HFT + V20 Confluence Engine {title_tag}", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
 
-    script_lines.extend([
-        "",
-        "    for i = 0 to array.size(sArr) - 1",
-        "        if array.get(sArr, i) == curSym",
-        "            array.push(dealTimes, int(str.tonumber(array.get(tArr, i))))",
-        "            array.push(dealCount, int(str.tonumber(array.get(cArr, i))))",
-        "            array.push(dealFirms, array.get(fArr, i))",
-        "",
-        'int curBarDayStart = timestamp("UTC", year(time, syminfo.timezone), month(time, syminfo.timezone), dayofmonth(time, syminfo.timezone), 0, 0, 0)',
-        "int dealIdx = array.size(dealTimes) > 0 ? array.binary_search(dealTimes, curBarDayStart) : -1",
-        "color hftBgColor = na",
-        "",
-        "if dealIdx >= 0",
-        '    bool shouldPlotLabel = timeframe.isdaily or (timeframe.isintraday and ta.change(time("D")))',
-        "    int    tCount = array.get(dealCount, dealIdx)",
-        "    string fList  = array.get(dealFirms, dealIdx)",
-        "    string lblSz = tCount >= 6 ? size.large : tCount >= 3 ? size.normal : size.small",
-        "    color  cCol  = tCount >= 6 ? #00E676 : #2E7D32",
-        "    hftBgColor := color.new(cCol, 85)",
-        "",
-        "    if shouldPlotLabel",
-        '        string tip = "HFT BULK DEAL\\nStock: " + syminfo.ticker + "\\nDate: " + str.format_time(time, "dd-MM-yyyy", syminfo.timezone) + "\\nTraders: " + str.tostring(tCount) + " of 12\\n----\\n" + fList',
-        '        label.new(x=bar_index, y=low, text="▲" + str.tostring(tCount), style=label.style_label_up, color=cCol, textcolor=color.white, size=lblSz, tooltip=tip)',
-        "",
-        'bgcolor(hftBgColor, title="HFT Cluster Day")',
-    ])
+// ================================================================
+// 1. CONFIGURATION & INPUTS
+// ================================================================
+grp_v20 = "V20: Price Action Pulse Setup"
+show_v20_chart        = input.bool(true,  title="Draw V20 Lines & Boxes on Chart?", group=grp_v20)
+percentThreshold      = input.float(0.20, title="Pulse Move Threshold (0.20 = 20%)", step=0.01, group=grp_v20)
+useMACondition        = input.bool(false, title="Require Start Low Below 200 SMA?", group=grp_v20)
+maLength              = input.int(200,    title="SMA Length", group=grp_v20)
+useCloseForExit       = input.bool(false, title="Use Close for Target Exit (vs High)?", group=grp_v20)
+rectOpacity           = input.int(20,     title="Streak Box Opacity (0-100)", group=grp_v20)
+v20ProximityThreshold = input.float(4.0,  title="Radar Proximity Threshold %", group=grp_v20)
+maxLineAgeYears       = input.int(2,      title="Max Setup Age (Years)", group=grp_v20)
+env_lookback_years    = input.int(10,     title="Backtest Lookback Window (Years)", minval=1, maxval=25, group=grp_v20)
 
-    return "\n".join(script_lines)
+grp_hft = "HFT Buying Confluence Filters"
+requireHftInStreak    = input.bool(true,  title="Require HFT Buying in Surge Streak (Filter Non-HFT)", group=grp_hft, tooltip="When enabled, V20 setups are ONLY generated if tracked HFT desks bought during any candle of the 20%+ surge. Non-HFT setups are removed.")
+requireHftOnTrigger   = input.bool(false, title="Require HFT Buying on Pullback Entry Day?", group=grp_hft, tooltip="If enabled, price must test the entry level AND HFT desks must be buying on that day.")
+showHftLabels         = input.bool(true,  title="Show HFT Bulk Deal Labels on Chart?", group=grp_hft)
+hftMinDealsToPlot     = input.int(1,      title="Min HFT Desks to Show Deal Label", minval=1, maxval=12, group=grp_hft, tooltip="Filter out minor deals to declutter chart. Set 2 or 3 for only major clusters.")
+showHftBg             = input.bool(true,  title="Show HFT Cluster Day Background?", group=grp_hft)
+showDashboard         = input.bool(true,  title="Show V20 + HFT Performance Dashboard?", group="Dashboard")
+
+// Colors
+color tvGreen = #388E3C
+color tvRed   = #D32F2F
+
+// ================================================================
+// 2. HFT DATA PARSER & PER-STOCK DATA INGESTION (NO DUPLICATES)
+// ================================================================
+f_split(str, sep) =>
+    string[] res = array.new_string(0)
+    int start = 0
+    int len = str.length(str)
+    for i = 0 to len - 1
+        if str.substring(str, i, i + 1) == sep
+            array.push(res, str.substring(str, start, i))
+            start := i + 1
+    if start <= len
+        array.push(res, str.substring(str, start, len))
+    res
+
+f_loadData(int[] tArr, int[] cArr, string[] fArr, string tStr, string cStr, string fStr) =>
+    string[] tSplit = f_split(tStr, ",")
+    string[] cSplit = f_split(cStr, ",")
+    string[] fSplit = f_split(fStr, "~")
+    int sz = array.size(tSplit)
+    if sz > 0
+        for i = 0 to sz - 1
+            array.push(tArr, int(str.tonumber(array.get(tSplit, i))))
+            array.push(cArr, int(str.tonumber(array.get(cSplit, i))))
+            array.push(fArr, array.get(fSplit, i))
+
+var int[]    dealTimes = array.new_int(0)
+var int[]    dealCount = array.new_int(0)
+var string[] dealFirms = array.new_string(0)
+
+if barstate.isfirst
+    string curSym = str.upper(syminfo.ticker)
+    int colonPos = str.pos(curSym, ":")
+    if colonPos >= 0
+        curSym := str.substring(curSym, colonPos + 1)
+
+{data_loading_block}
+
+// ================================================================
+// 3. HFT SIGNAL DETECTION ON CURRENT BAR
+// ================================================================
+int curBarDayStart = timestamp("UTC", year(time, syminfo.timezone), month(time, syminfo.timezone), dayofmonth(time, syminfo.timezone), 0, 0, 0)
+int dealIdx = array.size(dealTimes) > 0 ? array.binary_search(dealTimes, curBarDayStart) : -1
+bool isHftToday = dealIdx >= 0
+int tCount = isHftToday ? array.get(dealCount, dealIdx) : 0
+string fList = isHftToday ? array.get(dealFirms, dealIdx) : ""
+
+// HFT Subtle Background Tint
+color cCol = tCount >= 6 ? #00C853 : #2E7D32
+color hftBgColor = (showHftBg and isHftToday) ? color.new(cCol, 92) : na
+bgcolor(hftBgColor, title="HFT Cluster Buying Day")
+
+// Sleek Compact HFT Label (Tiny badge below bar, never overlaps candles)
+if showHftLabels and isHftToday and (tCount >= hftMinDealsToPlot)
+    bool shouldPlotHft = timeframe.isdaily or (timeframe.isintraday and ta.change(time("D")))
+    if shouldPlotHft
+        string tip = "HFT BULK BUY\\nStock: " + syminfo.ticker + "\\nDate: " + str.format_time(time, "dd-MM-yyyy", syminfo.timezone) + "\\nTraders: " + str.tostring(tCount) + " of 12 Desks\\n----\\n" + fList
+        label.new(x=bar_index, y=na, yloc=yloc.belowbar, text="▲" + str.tostring(tCount), style=label.style_label_up, color=cCol, textcolor=color.white, size=size.tiny, tooltip=tip)
+
+// ================================================================
+// 4. V20 PRICE ACTION PULSE ENGINE (FILTERED BY HFT BUYING)
+// ================================================================
+var float startCandleLow          = na
+var int   startLowTime            = na
+var float maAtStartLow            = na
+var float endCandleHigh           = na
+var float endCandleClose          = na
+var int   count                   = 0
+var bool  validStreak             = false
+var float percentageMove          = na
+var float streakFirstOpen         = na
+var float streakLastClose         = na
+var bool  hasPositiveOverallMove  = false
+var bool  streakHadHftBuy         = false
+var box   v20Rect                 = na
+
+var float[] v20_entries           = array.new_float(0)
+var float[] v20_exits             = array.new_float(0)
+var int[]   v20_startDates        = array.new_int(0)
+var int[]   v20_formTimes         = array.new_int(0)
+var bool[]  v20_active            = array.new_bool(0)
+var bool[]  v20_done              = array.new_bool(0)
+var int[]   v20_trigTimes         = array.new_int(0)
+var int[]   v20_ids               = array.new_int(0)
+var int     v20_setup_counter     = 0
+
+var int   v20_totalWins           = 0
+var int   v20_totalTrades         = 0
+var int   v20_totalHoldDays       = 0
+var int   v20_lastCompletedDate   = na
+var float v20_lastEntryPrice      = na
+var int   v20_lastEntryDate       = na
+var float v20_lastTargetPrice     = na
+var bool  v20_lastWin             = false
+var int   v20_lastSetupId         = na
+var int   v20_lastHoldDaysCount   = na
+
+maFilter = ta.sma(close, maLength)
+isGreen  = close >= open
+
+checkOverallMovement(firstOpen, lastClose) =>
+    if na(firstOpen) or na(lastClose)
+        false
+    else
+        overallMove = ((lastClose - firstOpen) / firstOpen) * 100.0
+        overallMove >= 0.5
+
+// Streak Completion (Streak Breaks or Turns Non-Green)
+if not isGreen
+    // Check if climax / break day candle had HFT buying
+    if isHftToday and validStreak
+        streakHadHftBuy := true
+
+    if count > 0 and not na(streakFirstOpen) and not na(streakLastClose)
+        hasPositiveOverallMove := checkOverallMovement(streakFirstOpen, streakLastClose)
+
+    // CRITICAL HFT FILTER: Remove V20 setups where HFT did not buy during any candle of the 20%+ surge
+    bool passesHftFilter = not requireHftInStreak or streakHadHftBuy
+
+    if validStreak and not na(percentageMove) and percentageMove >= (percentThreshold * 100.0) and hasPositiveOverallMove and passesHftFilter
+        patternMeetsMA = not useMACondition or (startCandleLow < maAtStartLow)
+        if patternMeetsMA
+            v20_setup_counter += 1
+            float entryPrice = startCandleLow
+            float exitLevel  = useCloseForExit ? endCandleClose : endCandleHigh
+
+            array.push(v20_entries, entryPrice)
+            array.push(v20_exits, exitLevel)
+            array.push(v20_startDates, startLowTime)
+            array.push(v20_formTimes, time)
+            array.push(v20_active, false)
+            array.push(v20_done, false)
+            array.push(v20_trigTimes, 0)
+            array.push(v20_ids, v20_setup_counter)
+
+            if show_v20_chart
+                string tip = "V20+HFT Setup #" + str.tostring(v20_setup_counter) + "\\nEntry: " + str.tostring(entryPrice, "#.##") + "\\nTarget: " + str.tostring(exitLevel, "#.##")
+                label.new(x=bar_index, y=na, yloc=yloc.belowbar, text="📐 #" + str.tostring(v20_setup_counter), style=label.style_label_up, color=#1565C0, textcolor=color.white, size=size.tiny, tooltip=tip)
+
+    if not na(v20Rect)
+        v20Rect := na
+
+    count := 0
+    validStreak := false
+    startCandleLow := na
+    startLowTime := na
+    endCandleHigh := na
+    endCandleClose := na
+    percentageMove := na
+    streakFirstOpen := na
+    streakLastClose := na
+    hasPositiveOverallMove := false
+    streakHadHftBuy := false
+
+// Streak Progression (Green Candle)
+if isGreen
+    if na(startCandleLow)
+        startCandleLow := low
+        startLowTime   := time
+        maAtStartLow   := maFilter
+        streakFirstOpen:= open
+        streakHadHftBuy:= isHftToday
+    else
+        // Check if ANY candle of the 20%+ move has HFT buying
+        if isHftToday
+            streakHadHftBuy := true
+
+    count += 1
+    endCandleHigh  := math.max(nz(endCandleHigh, low), high)
+    endCandleClose := close
+    streakLastClose:= close
+
+    percentageMove := ((endCandleHigh - startCandleLow) / startCandleLow) * 100.0
+    if percentageMove >= (percentThreshold * 100.0) or ((high - low) / low) >= percentThreshold
+        validStreak := true
+
+    currentPatternMeetsMA = not useMACondition or (startCandleLow < maAtStartLow)
+    if not na(streakFirstOpen) and not na(streakLastClose)
+        hasPositiveOverallMove := checkOverallMovement(streakFirstOpen, streakLastClose)
+
+    bool meetsHftConfluence = not requireHftInStreak or streakHadHftBuy
+    if validStreak and currentPatternMeetsMA and hasPositiveOverallMove and meetsHftConfluence and show_v20_chart
+        if na(v20Rect)
+            v20Rect := box.new(left=bar_index - count + 1, top=endCandleHigh, right=bar_index, bottom=startCandleLow, border_color=na, bgcolor=color.new(color.green, 100 - rectOpacity))
+        else
+            box.set_right(v20Rect, bar_index)
+            box.set_top(v20Rect, endCandleHigh)
+            box.set_bottom(v20Rect, startCandleLow)
+
+// ================================================================
+// 5. V20 TRADE SIMULATION & BACKTEST (PULLBACK ENTRY & TARGET HIT)
+// ================================================================
+int capMs = maxLineAgeYears * 365 * 24 * 60 * 60 * 1000
+int globalCutoffTime = timenow - (env_lookback_years * 365 * 24 * 60 * 60 * 1000)
+int totalV20Setups = array.size(v20_entries)
+
+if totalV20Setups > 0
+    for i = 0 to totalV20Setups - 1
+        int   fTime    = array.get(v20_formTimes, i)
+        float entryLvl = array.get(v20_entries, i)
+        float exitLvl  = array.get(v20_exits, i)
+        bool  inTrade  = array.get(v20_active, i)
+        bool  isDone   = array.get(v20_done, i)
+        int   tTime    = array.get(v20_trigTimes, i)
+        int   sId      = array.get(v20_ids, i)
+
+        if isDone or (not inTrade and (time - fTime > capMs))
+            continue
+
+        // Pullback Entry Trigger
+        if not inTrade and not isDone and (fTime >= globalCutoffTime) and (time > fTime)
+            bool triggerAllowed = not requireHftOnTrigger or isHftToday
+            if low <= entryLvl and triggerAllowed
+                array.set(v20_active, i, true)
+                array.set(v20_trigTimes, i, time)
+                tTime   := time
+                inTrade := true
+                if show_v20_chart
+                    label.new(x=bar_index, y=na, yloc=yloc.belowbar, text="🟢 BUY #" + str.tostring(sId) + "\\n₹" + str.tostring(close, "#.##"), style=label.style_label_up, color=#2E7D32, textcolor=color.white, size=size.small)
+
+        // Target Hit Detection
+        if inTrade and (time > tTime)
+            int holdDays = math.max(1, math.round((time - tTime) / (1000 * 60 * 60 * 24)))
+            if high >= exitLvl
+                v20_totalTrades   += 1
+                v20_totalWins     += 1
+                v20_totalHoldDays += holdDays
+
+                if na(v20_lastCompletedDate) or (time >= v20_lastCompletedDate and tTime >= nz(v20_lastEntryDate, 0))
+                    v20_lastCompletedDate := time
+                    v20_lastEntryPrice    := entryLvl
+                    v20_lastEntryDate     := tTime
+                    v20_lastTargetPrice   := exitLvl
+                    v20_lastWin           := true
+                    v20_lastSetupId       := sId
+                    v20_lastHoldDaysCount := holdDays
+
+                array.set(v20_active, i, false)
+                array.set(v20_done, i, true)
+                if show_v20_chart
+                    label.new(x=bar_index, y=na, yloc=yloc.abovebar, text="🎯 TARGET #" + str.tostring(sId) + "\\n₹" + str.tostring(exitLvl, "#.##") + " (" + str.tostring(holdDays) + "d)", style=label.style_label_down, color=color.purple, textcolor=color.white, size=size.small)
+
+// ================================================================
+// 6. ACTIVE & NEARBY OPPORTUNITY SUPPORT LINES
+// ================================================================
+float activeEntry        = na
+float activeTarget       = na
+int   activeDate         = na
+int   activeId           = na
+bool  isAnyV20InTrade    = false
+float minActiveDist      = 100000000.0
+
+int   nearestOppId       = na
+float nearestOppEntry    = na
+float nearestOppTarget   = na
+int   nearestOppFormDate = na
+float minOppDist         = 100000000.0
+bool  isNearInRadar      = false
+
+if totalV20Setups > 0
+    for i = 0 to totalV20Setups - 1
+        bool  isActive = array.get(v20_active, i)
+        bool  isDone   = array.get(v20_done, i)
+        int   fTime    = array.get(v20_formTimes, i)
+        float entryLvl = array.get(v20_entries, i)
+        float exitLvl  = array.get(v20_exits, i)
+        int   sId      = array.get(v20_ids, i)
+        int   tTime    = array.get(v20_trigTimes, i)
+
+        // Track active trade
+        if isActive
+            isAnyV20InTrade := true
+            float dist = math.abs(close - entryLvl)
+            if dist < minActiveDist
+                minActiveDist := dist
+                activeEntry   := entryLvl
+                activeTarget  := exitLvl
+                activeDate    := tTime
+                activeId      := sId
+
+        // Track closest pending opportunity
+        if not isDone and not isActive and (time - fTime <= capMs)
+            float distToClose = math.abs(close - entryLvl)
+            if distToClose < minOppDist
+                minOppDist         := distToClose
+                nearestOppId       := sId
+                nearestOppEntry    := entryLvl
+                nearestOppTarget   := exitLvl
+                nearestOppFormDate := fTime
+
+    // Check if nearest pending opportunity is within Radar Proximity threshold
+    if not na(nearestOppEntry)
+        float uBuff = nearestOppEntry * (1.0 + (v20ProximityThreshold / 100.0))
+        float lBuff = nearestOppEntry * (1.0 - (v20ProximityThreshold / 100.0))
+        if ((close <= uBuff and close >= lBuff) or (low <= uBuff and high >= lBuff))
+            isNearInRadar := true
+
+var line v20_entry_line  = na
+var line v20_target_line = na
+
+if show_v20_chart
+    line.delete(v20_entry_line)
+    line.delete(v20_target_line)
+    // If active trade exists, show active trade levels; else show nearest opportunity levels!
+    float lineEnt = isAnyV20InTrade ? activeEntry : nearestOppEntry
+    float lineTgt = isAnyV20InTrade ? activeTarget : nearestOppTarget
+    if not na(lineEnt)
+        color entColor = isAnyV20InTrade ? color.green : (isNearInRadar ? color.orange : color.blue)
+        v20_entry_line  := line.new(x1=bar_index - 40, y1=lineEnt, x2=bar_index + 10, y2=lineEnt, color=entColor, width=2)
+        v20_target_line := line.new(x1=bar_index - 40, y1=lineTgt, x2=bar_index + 10, y2=lineTgt, color=color.red,   width=2)
+
+// ================================================================
+// 7. ACTIONABLE V20 + HFT RADAR & PERFORMANCE DASHBOARD
+// ================================================================
+float v20_winRate = v20_totalTrades > 0 ? (v20_totalWins / v20_totalTrades) * 100.0 : 0.0
+int   v20_avgHold = v20_totalTrades > 0 ? math.round(v20_totalHoldDays / v20_totalTrades) : 0
+
+var table infoTbl = table.new(position=position.top_right, columns=2, rows=10, bgcolor=#161B22, border_width=1, border_color=#30363D)
+if showDashboard and barstate.islast
+    // Header
+    table.cell(infoTbl, 0, 0, "⚡ V20 + HFT Engine", bgcolor=#21262D, text_color=#58A6FF, text_size=size.small)
+    table.cell(infoTbl, 1, 0, syminfo.ticker,           bgcolor=#21262D, text_color=color.white, text_size=size.small)
+
+    // Row 1: Active Trade Status & Live PnL
+    if isAnyV20InTrade
+        float livePnL = not na(activeEntry) and activeEntry > 0 ? ((close - activeEntry) / activeEntry) * 100.0 : 0.0
+        int openDays = not na(activeDate) ? math.max(1, math.round((time - activeDate) / (1000 * 60 * 60 * 24))) : 1
+        string actStr = "#" + str.tostring(activeId) + " @ " + str.tostring(activeEntry, "#.##") + " (" + (livePnL >= 0 ? "+" : "") + str.tostring(livePnL, "#.#") + "% | " + str.tostring(openDays) + "d)"
+        table.cell(infoTbl, 0, 1, "Active Trade", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 1, actStr,        bgcolor=livePnL >= 0 ? tvGreen : tvRed,  text_color=color.white, text_size=size.small)
+    else
+        table.cell(infoTbl, 0, 1, "Active Trade", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 1, "None",        bgcolor=#21262D, text_color=#8B949E, text_size=size.small)
+
+    // Row 2: Active Trade Target
+    if isAnyV20InTrade and not na(activeTarget)
+        float remGain = not na(activeEntry) and activeEntry > 0 ? ((activeTarget - close) / close) * 100.0 : 0.0
+        string tgtStr = str.tostring(activeTarget, "#.##") + " (" + (remGain >= 0 ? "+" : "") + str.tostring(remGain, "#.#") + "% to target)"
+        table.cell(infoTbl, 0, 2, "Active Target", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 2, tgtStr,         bgcolor=#161B22, text_color=color.white, text_size=size.small)
+    else
+        table.cell(infoTbl, 0, 2, "Active Target", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 2, "NA",            bgcolor=#21262D, text_color=#8B949E, text_size=size.small)
+
+    // Row 3: Nearby New Opportunity (Setup # and Entry Price based on Current Price)
+    if not na(nearestOppId)
+        float oppDiffPct = ((close - nearestOppEntry) / close) * 100.0
+        string diffStr = str.tostring(math.abs(oppDiffPct), "#.#") + "% " + (oppDiffPct > 0 ? "below" : "above")
+        string oppStr = "#" + str.tostring(nearestOppId) + " @ " + str.tostring(nearestOppEntry, "#.##") + " (" + diffStr + ")"
+        color oppBg = isNearInRadar ? color.orange : #21262D
+        color oppTxt = isNearInRadar ? color.black : #58A6FF
+        table.cell(infoTbl, 0, 3, "Nearby Setup", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 3, oppStr,        bgcolor=oppBg,   text_color=oppTxt,      text_size=size.small)
+    else
+        table.cell(infoTbl, 0, 3, "Nearby Setup", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 3, "None Pending", bgcolor=#21262D, text_color=#8B949E, text_size=size.small)
+
+    // Row 4: Opportunity Target & Potential Gain
+    if not na(nearestOppId) and not na(nearestOppTarget)
+        float potReward = nearestOppEntry > 0 ? ((nearestOppTarget - nearestOppEntry) / nearestOppEntry) * 100.0 : 0.0
+        string potStr = str.tostring(nearestOppTarget, "#.##") + " (+" + str.tostring(potReward, "#.#") + "% pot)" + (isNearInRadar ? " [RADAR]" : "")
+        table.cell(infoTbl, 0, 4, "Setup Target", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 4, potStr,        bgcolor=#161B22, text_color=color.white, text_size=size.small)
+    else
+        table.cell(infoTbl, 0, 4, "Setup Target", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 4, "NA",           bgcolor=#21262D, text_color=#8B949E, text_size=size.small)
+
+    // Row 5: Last Exited Trade Outcome & Profit/Loss
+    float v20_lastGain = not na(v20_lastTargetPrice) and not na(v20_lastEntryPrice) ? ((v20_lastTargetPrice - v20_lastEntryPrice) / v20_lastEntryPrice) * 100.0 : na
+    int   v20_dispDays = nz(v20_lastHoldDaysCount, not na(v20_lastCompletedDate) and not na(v20_lastEntryDate) ? math.max(1, math.round((v20_lastCompletedDate - v20_lastEntryDate) / (1000 * 60 * 60 * 24))) : 0)
+    if not na(v20_lastCompletedDate)
+        string outcomeStr = v20_lastWin ? "Target Hit" : "Stopped"
+        string lastPnlStr = "#" + str.tostring(v20_lastSetupId) + ": " + (v20_lastGain >= 0 ? "+" : "") + str.tostring(v20_lastGain, "#.#") + "% (" + str.tostring(v20_dispDays) + "d hold) - " + outcomeStr
+        color  lastBg = v20_lastWin ? color.purple : color.maroon
+        table.cell(infoTbl, 0, 5, "Last Trade Result", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 5, lastPnlStr,          bgcolor=lastBg,  text_color=color.white, text_size=size.small)
+    else
+        table.cell(infoTbl, 0, 5, "Last Trade Result", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 5, "No closed trades",  bgcolor=#21262D, text_color=#8B949E, text_size=size.small)
+
+    // Row 6: Last Entry Price & Exit Price
+    if not na(v20_lastEntryPrice) and not na(v20_lastTargetPrice)
+        string priceStr = "Buy: " + str.tostring(v20_lastEntryPrice, "#.##") + " | Exit: " + str.tostring(v20_lastTargetPrice, "#.##")
+        table.cell(infoTbl, 0, 6, "Last Buy / Exit", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 6, priceStr,          bgcolor=#161B22, text_color=#58A6FF, text_size=size.small)
+    else
+        table.cell(infoTbl, 0, 6, "Last Buy / Exit", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 6, "NA",              bgcolor=#21262D, text_color=#8B949E, text_size=size.small)
+
+    // Row 7: Buying Date & Exit Date of Last Trade
+    if not na(v20_lastCompletedDate) and not na(v20_lastEntryDate)
+        string buyDateStr = str.format_time(v20_lastEntryDate, "dd-MM-yyyy", syminfo.timezone)
+        string exitDateStr = str.format_time(v20_lastCompletedDate, "dd-MM-yyyy", syminfo.timezone)
+        string datesStr = buyDateStr + " → " + exitDateStr
+        table.cell(infoTbl, 0, 7, "Last Trade Dates", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 7, datesStr,            bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+    else
+        table.cell(infoTbl, 0, 7, "Last Trade Dates", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 7, "NA",                bgcolor=#21262D, text_color=#8B949E, text_size=size.small)
+
+    // Row 8: Historical Win Rate & Stats
+    string perfStr = v20_totalTrades > 0 ? str.tostring(v20_winRate, "#") + "% (" + str.tostring(v20_totalWins) + "/" + str.tostring(v20_totalTrades) + " wins, avg " + str.tostring(v20_avgHold) + "d)" : "No Trades"
+    color  perfBg  = v20_winRate >= 70 ? tvGreen : v20_winRate >= 50 ? color.orange : color.new(color.black, 40)
+    table.cell(infoTbl, 0, 8, "Win Rate", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+    table.cell(infoTbl, 1, 8, perfStr,    bgcolor=perfBg,  text_color=color.white, text_size=size.small)
+
+    // Row 9: HFT Bulk Buy Deals
+    string hftStr = array.size(dealTimes) > 0 ? str.tostring(array.size(dealTimes)) + " Deals (12 Desks)" : "No HFT Deals"
+    table.cell(infoTbl, 0, 9, "HFT Buys",  bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+    table.cell(infoTbl, 1, 9, hftStr,     bgcolor=#161B22, text_color=#7EE787, text_size=size.small)
+"""
+    return script
 
 
 class handler(BaseHTTPRequestHandler):

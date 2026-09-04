@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>HFT Bulk Deal → Pine Script Generator</title>
+  <title>HFT + V20 Confluence → Pine Script Generator</title>
   <!-- Select2 CSS -->
   <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
   <style>
@@ -264,8 +264,8 @@
   <div class="container">
     <div class="header">
       <div class="title-area">
-        <h1>HFT Bulk Deal &rarr; Pine Script Generator</h1>
-        <p>Generates compact, high-speed TradingView indicator scripts for 12 tracked HFT & Algo Desks</p>
+        <h1>HFT + V20 Confluence &rarr; Pine Script</h1>
+        <p>V20 Price Action Pulse combined with 12 tracked HFT Desks (Filters out setups without HFT Buying)</p>
       </div>
       <div id="statusBadge" class="badge loading">
         Loading stocks...
@@ -345,7 +345,7 @@
         });
 
         badge.className = "badge";
-        badge.innerText = `✓ ${allSymbols.length} stocks available (12 Desks)`;
+        badge.innerText = `✓ ${allSymbols.length} stocks with HFT Buys (12 Desks)`;
 
         // Pre-select first 3 stocks if available to provide an instant demo script
         if (allSymbols.length > 0) {
