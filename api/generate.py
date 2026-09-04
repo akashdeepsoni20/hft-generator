@@ -65,13 +65,14 @@ class handler(BaseHTTPRequestHandler):
                 count_list.append(str(len(row["Matched_HFT"])))
                 firm_list.append("\\n".join(row["Matched_HFT"]))
 
-            def make_safe_chunked_str(lst, max_chars=1000):
+            # Strict character-budget chunking (max 500 chars per literal to stay safely below 4096)
+            def make_safe_chunked_str(lst, max_chars=500):
                 chunks = []
                 current_batch = []
                 current_len = 0
                 for item in lst:
                     item_str = str(item)
-                    item_len = len(item_str) + 1
+                    item_len = len(item_str) + 1  # +1 for comma separator
                     if current_len + item_len > max_chars and current_batch:
                         chunks.append(f'"{",".join(current_batch)}"')
                         current_batch = [item_str]
