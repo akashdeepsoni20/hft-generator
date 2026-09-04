@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/generate.py": {
+      "runtime": "vercel-python@5.3.0"
+    }
+  },
   "rewrites": [
     { "source": "/api/generate", "destination": "/api/generate.py" },
     { "source": "/(.*)", "destination": "/public/$1" }
