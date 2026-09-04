@@ -47,10 +47,9 @@ class handler(BaseHTTPRequestHandler):
 
             hft_df = df.dropna(subset=["Matched_HFT"]).copy()
             hft_df["ParsedDate"] = pd.to_datetime(hft_df[date_col], errors="coerce")
-            hft_df = hft_df.dropna(subset=["ParsedDate"]).drop_duplicates()
+            hft_df = hft_df.dropna(subset=["ParsedDate"])
 
-            # Group properly by symbol and date, taking unique HFT firms and sorting them
-            grouped = hft_df.groupby(["CleanSym", "ParsedDate"])["Matched_HFT"].apply(lambda x: sorted(list(set(x)))).reset_index()
+            grouped = hft_df.groupby(["CleanSym", "ParsedDate"])["Matched_HFT"].agg(lambda x: sorted(list(set(x)))).reset_index()
             grouped = grouped.sort_values(by="ParsedDate")
 
             sym_list = []
@@ -66,17 +65,29 @@ class handler(BaseHTTPRequestHandler):
                 count_list.append(str(len(row["Matched_HFT"])))
                 firm_list.append("\\n".join(row["Matched_HFT"]))
 
-            # Smaller batch size (25) ensures lines stay safely under TradingView's 4096 limit
-            def make_item_chunked_str(lst, batch_size=25):
-                batches = [lst[i:i+batch_size] for i in range(0, len(lst), batch_size)]
-                batch_strs = [f'"{",".join(batch)}"' for batch in batches]
-                return ' + \n         '.join(batch_strs)
+            # Strict character-budget chunking (max 2000 chars per literal to stay safely below 4096)
+            def make_safe_chunked_str(lst, max_chars=2000):
+                chunks = []
+                current_batch = []
+                current_len = 0
+                for item in lst:
+                    item_len = len(item) + 1  # +1 for comma separator
+                    if current_len + item_len > max_chars and current_batch:
+                        chunks.append(f'"{",".join(current_batch)}"')
+                        current_batch = [item]
+                        current_len = item_len
+                    else:
+                        current_batch.append(item)
+                        current_len += item_len
+                if current_batch:
+                    chunks.append(f'"{",".join(current_batch)}"')
+                return ' + \n         '.join(chunks)
 
             lines = [
-                f'sData = {make_item_chunked_str(sym_list)}',
-                f'tData = {make_item_chunked_str(time_list)}',
-                f'cData = {make_item_chunked_str(count_list)}',
-                f'fData = {make_item_chunked_str(firm_list)}'
+                f'sData = {make_safe_chunked_str(sym_list)}',
+                f'tData = {make_safe_chunked_str(time_list)}',
+                f'cData = {make_safe_chunked_str(count_list)}',
+                f'fData = {make_safe_chunked_str(firm_list)}'
             ]
 
             output = "\n".join(lines)
