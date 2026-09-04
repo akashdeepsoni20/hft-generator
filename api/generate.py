@@ -6,6 +6,8 @@ import pandas as pd
 import requests
 
 BLOB_CSV_URL = "https://mywebsitecontainer.blob.core.windows.net/hft/hft.csv"
+WATCHLIST_XLSX_URL = "https://mywebsitecontainer.blob.core.windows.net/hft/watchlist.xlsx"
+WATCHLIST_CSV_URL = "https://mywebsitecontainer.blob.core.windows.net/hft/watchlist.csv"
 
 TRACKED_HFTS = {
     "JUMP TRADING": "Jump Trading",
@@ -33,6 +35,70 @@ def match_hft(client_name):
     return None
 
 
+def fetch_watchlist():
+    """Fetches tracked stock symbols from Azure Blob (watchlist.xlsx or watchlist.csv)
+    with optional fallback to local watchlist file.
+    Returns a set of clean uppercase symbol strings, or None if no watchlist is defined.
+    """
+    # 1. Try watchlist.xlsx from Azure Blob
+    try:
+        resp = requests.get(WATCHLIST_XLSX_URL, timeout=8)
+        if resp.status_code == 200:
+            df_wl = pd.read_excel(io.BytesIO(resp.content))
+            sym_col = next((c for c in df_wl.columns if any(k in str(c).lower() for k in ["symbol", "stock", "ticker"])), df_wl.columns[0] if len(df_wl.columns) > 0 else None)
+            if sym_col:
+                symbols = df_wl[sym_col].dropna().astype(str).str.strip().str.upper().tolist()
+                valid = {s for s in symbols if s and s != "NAN" and len(s) > 1}
+                if valid:
+                    return valid
+    except Exception:
+        pass
+
+    # 2. Try watchlist.csv from Azure Blob
+    try:
+        resp = requests.get(WATCHLIST_CSV_URL, timeout=8)
+        if resp.status_code == 200:
+            df_wl = pd.read_csv(io.StringIO(resp.text))
+            sym_col = next((c for c in df_wl.columns if any(k in str(c).lower() for k in ["symbol", "stock", "ticker"])), df_wl.columns[0] if len(df_wl.columns) > 0 else None)
+            if sym_col:
+                symbols = df_wl[sym_col].dropna().astype(str).str.strip().str.upper().tolist()
+                valid = {s for s in symbols if s and s != "NAN" and len(s) > 1}
+                if valid:
+                    return valid
+    except Exception:
+        pass
+
+    # 3. Local fallback (if watchlist.xlsx exists in project directory)
+    import os
+    local_dir = os.path.dirname(os.path.dirname(__file__))
+    local_xlsx = os.path.join(local_dir, "watchlist.xlsx")
+    local_csv = os.path.join(local_dir, "watchlist.csv")
+    if os.path.exists(local_xlsx):
+        try:
+            df_wl = pd.read_excel(local_xlsx)
+            sym_col = next((c for c in df_wl.columns if any(k in str(c).lower() for k in ["symbol", "stock", "ticker"])), df_wl.columns[0] if len(df_wl.columns) > 0 else None)
+            if sym_col:
+                symbols = df_wl[sym_col].dropna().astype(str).str.strip().str.upper().tolist()
+                valid = {s for s in symbols if s and s != "NAN" and len(s) > 1}
+                if valid:
+                    return valid
+        except Exception:
+            pass
+    elif os.path.exists(local_csv):
+        try:
+            df_wl = pd.read_csv(local_csv)
+            sym_col = next((c for c in df_wl.columns if any(k in str(c).lower() for k in ["symbol", "stock", "ticker"])), df_wl.columns[0] if len(df_wl.columns) > 0 else None)
+            if sym_col:
+                symbols = df_wl[sym_col].dropna().astype(str).str.strip().str.upper().tolist()
+                valid = {s for s in symbols if s and s != "NAN" and len(s) > 1}
+                if valid:
+                    return valid
+        except Exception:
+            pass
+
+    return None
+
+
 def fetch_and_process_hft_data():
     resp = requests.get(BLOB_CSV_URL, timeout=12)
     resp.raise_for_status()
@@ -53,6 +119,11 @@ def fetch_and_process_hft_data():
     # Filter strictly to BUY deals so only institutional HFT accumulation is tracked
     if bs_col:
         hft_df = hft_df[hft_df[bs_col].astype(str).str.upper().str.strip() == "BUY"].copy()
+
+    # Filter by Watchlist from Blob (or local template) if configured
+    watchlist = fetch_watchlist()
+    if watchlist:
+        hft_df = hft_df[hft_df["CleanSym"].isin(watchlist)].copy()
 
     # Optimized date parsing
     try:
