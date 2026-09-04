@@ -308,10 +308,19 @@
     let allSymbols = [];
 
     $(document).ready(function() {
-      $('#stockSelect').select2({
+      const $select = $('#stockSelect');
+
+      $select.select2({
         placeholder: "Search and select stocks (e.g. 5PAISA, ANGELONE)...",
         allowClear: true,
-        closeOnSelect: false
+        closeOnSelect: true
+      });
+
+      // Ensure typed search keyword is completely cleared when a stock is selected or removed
+      $select.on('select2:select select2:unselect', function() {
+        setTimeout(function() {
+          $('.select2-search__field').val('').trigger('input');
+        }, 10);
       });
 
       initSymbols();
