@@ -470,6 +470,8 @@ float nearestOppTarget   = na
 int   nearestOppFormDate = na
 float minOppDist         = 100000000.0
 bool  isNearInRadar      = false
+int   totalPendingCount  = 0
+string pendingIdsStr     = ""
 
 if totalV20Setups > 0
     for i = 0 to totalV20Setups - 1
@@ -492,8 +494,10 @@ if totalV20Setups > 0
                 activeDate    := tTime
                 activeId      := sId
 
-        // Track closest pending opportunity
+        // Track pending opportunities
         if not isDone and not isActive and (time - fTime <= capMs)
+            totalPendingCount += 1
+            pendingIdsStr := (pendingIdsStr == "" ? "" : pendingIdsStr + ", ") + "#" + str.tostring(sId)
             float distToClose = math.abs(close - entryLvl)
             if distToClose < minOppDist
                 minOppDist         := distToClose
@@ -529,7 +533,7 @@ if show_v20_chart
 float v20_winRate = v20_totalTrades > 0 ? (v20_totalWins / v20_totalTrades) * 100.0 : 0.0
 int   v20_avgHold = v20_totalTrades > 0 ? math.round(v20_totalHoldDays / v20_totalTrades) : 0
 
-var table infoTbl = table.new(position=position.top_right, columns=2, rows=10, bgcolor=#161B22, border_width=1, border_color=#30363D)
+var table infoTbl = table.new(position=position.top_right, columns=2, rows=11, bgcolor=#161B22, border_width=1, border_color=#30363D)
 if showDashboard and barstate.islast
     // Header
     table.cell(infoTbl, 0, 0, "⚡ V20 + HFT Engine", bgcolor=#21262D, text_color=#58A6FF, text_size=size.small)
@@ -556,72 +560,78 @@ if showDashboard and barstate.islast
         table.cell(infoTbl, 0, 2, "Active Target", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
         table.cell(infoTbl, 1, 2, "NA",            bgcolor=#21262D, text_color=#8B949E, text_size=size.small)
 
-    // Row 3: Nearby New Opportunity (Setup # and Entry Price based on Current Price)
+    // Row 3: Pending Setups (Count & IDs Waiting for Pullback)
+    string pendStr = totalPendingCount > 0 ? str.tostring(totalPendingCount) + " (" + pendingIdsStr + ")" : "0 Pending"
+    color pendBg = totalPendingCount > 0 ? #21262D : #161B22
+    table.cell(infoTbl, 0, 3, "Pending Setups", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+    table.cell(infoTbl, 1, 3, pendStr,         bgcolor=pendBg,   text_color=#58A6FF,    text_size=size.small)
+
+    // Row 4: Nearby New Opportunity (Setup # and Entry Price based on Current Price)
     if not na(nearestOppId)
         float oppDiffPct = ((close - nearestOppEntry) / close) * 100.0
         string diffStr = str.tostring(math.abs(oppDiffPct), "#.#") + "% " + (oppDiffPct > 0 ? "below" : "above")
         string oppStr = "#" + str.tostring(nearestOppId) + " @ " + str.tostring(nearestOppEntry, "#.##") + " (" + diffStr + ")"
         color oppBg = isNearInRadar ? color.orange : #21262D
         color oppTxt = isNearInRadar ? color.black : #58A6FF
-        table.cell(infoTbl, 0, 3, "Nearby Setup", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
-        table.cell(infoTbl, 1, 3, oppStr,        bgcolor=oppBg,   text_color=oppTxt,      text_size=size.small)
+        table.cell(infoTbl, 0, 4, "Nearby Setup", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 4, oppStr,        bgcolor=oppBg,   text_color=oppTxt,      text_size=size.small)
     else
-        table.cell(infoTbl, 0, 3, "Nearby Setup", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
-        table.cell(infoTbl, 1, 3, "None Pending", bgcolor=#21262D, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 0, 4, "Nearby Setup", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 4, "None Pending", bgcolor=#21262D, text_color=#8B949E, text_size=size.small)
 
-    // Row 4: Opportunity Target & Potential Gain
+    // Row 5: Opportunity Target & Potential Gain
     if not na(nearestOppId) and not na(nearestOppTarget)
         float potReward = nearestOppEntry > 0 ? ((nearestOppTarget - nearestOppEntry) / nearestOppEntry) * 100.0 : 0.0
         string potStr = str.tostring(nearestOppTarget, "#.##") + " (+" + str.tostring(potReward, "#.#") + "% pot)" + (isNearInRadar ? " [RADAR]" : "")
-        table.cell(infoTbl, 0, 4, "Setup Target", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
-        table.cell(infoTbl, 1, 4, potStr,        bgcolor=#161B22, text_color=color.white, text_size=size.small)
+        table.cell(infoTbl, 0, 5, "Setup Target", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 5, potStr,        bgcolor=#161B22, text_color=color.white, text_size=size.small)
     else
-        table.cell(infoTbl, 0, 4, "Setup Target", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
-        table.cell(infoTbl, 1, 4, "NA",           bgcolor=#21262D, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 0, 5, "Setup Target", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 5, "NA",           bgcolor=#21262D, text_color=#8B949E, text_size=size.small)
 
-    // Row 5: Last Exited Trade Outcome & Profit/Loss
+    // Row 6: Last Exited Trade Outcome & Profit/Loss
     float v20_lastGain = not na(v20_lastTargetPrice) and not na(v20_lastEntryPrice) ? ((v20_lastTargetPrice - v20_lastEntryPrice) / v20_lastEntryPrice) * 100.0 : na
     int   v20_dispDays = nz(v20_lastHoldDaysCount, not na(v20_lastCompletedDate) and not na(v20_lastEntryDate) ? math.max(1, math.round((v20_lastCompletedDate - v20_lastEntryDate) / (1000 * 60 * 60 * 24))) : 0)
     if not na(v20_lastCompletedDate)
         string outcomeStr = v20_lastWin ? "Target Hit" : "Stopped"
         string lastPnlStr = "#" + str.tostring(v20_lastSetupId) + ": " + (v20_lastGain >= 0 ? "+" : "") + str.tostring(v20_lastGain, "#.#") + "% (" + str.tostring(v20_dispDays) + "d hold) - " + outcomeStr
         color  lastBg = v20_lastWin ? color.purple : color.maroon
-        table.cell(infoTbl, 0, 5, "Last Trade Result", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
-        table.cell(infoTbl, 1, 5, lastPnlStr,          bgcolor=lastBg,  text_color=color.white, text_size=size.small)
+        table.cell(infoTbl, 0, 6, "Last Trade Result", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 6, lastPnlStr,          bgcolor=lastBg,  text_color=color.white, text_size=size.small)
     else
-        table.cell(infoTbl, 0, 5, "Last Trade Result", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
-        table.cell(infoTbl, 1, 5, "No closed trades",  bgcolor=#21262D, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 0, 6, "Last Trade Result", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 6, "No closed trades",  bgcolor=#21262D, text_color=#8B949E, text_size=size.small)
 
-    // Row 6: Last Entry Price & Exit Price
+    // Row 7: Last Entry Price & Exit Price
     if not na(v20_lastEntryPrice) and not na(v20_lastTargetPrice)
         string priceStr = "Buy: " + str.tostring(v20_lastEntryPrice, "#.##") + " | Exit: " + str.tostring(v20_lastTargetPrice, "#.##")
-        table.cell(infoTbl, 0, 6, "Last Buy / Exit", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
-        table.cell(infoTbl, 1, 6, priceStr,          bgcolor=#161B22, text_color=#58A6FF, text_size=size.small)
+        table.cell(infoTbl, 0, 7, "Last Buy / Exit", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 7, priceStr,          bgcolor=#161B22, text_color=#58A6FF, text_size=size.small)
     else
-        table.cell(infoTbl, 0, 6, "Last Buy / Exit", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
-        table.cell(infoTbl, 1, 6, "NA",              bgcolor=#21262D, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 0, 7, "Last Buy / Exit", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 7, "NA",              bgcolor=#21262D, text_color=#8B949E, text_size=size.small)
 
-    // Row 7: Buying Date & Exit Date of Last Trade
+    // Row 8: Buying Date & Exit Date of Last Trade
     if not na(v20_lastCompletedDate) and not na(v20_lastEntryDate)
         string buyDateStr = str.format_time(v20_lastEntryDate, "dd-MM-yyyy", syminfo.timezone)
         string exitDateStr = str.format_time(v20_lastCompletedDate, "dd-MM-yyyy", syminfo.timezone)
         string datesStr = buyDateStr + " → " + exitDateStr
-        table.cell(infoTbl, 0, 7, "Last Trade Dates", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
-        table.cell(infoTbl, 1, 7, datesStr,            bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 0, 8, "Last Trade Dates", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 8, datesStr,            bgcolor=#161B22, text_color=#58A6FF, text_size=size.small)
     else
-        table.cell(infoTbl, 0, 7, "Last Trade Dates", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
-        table.cell(infoTbl, 1, 7, "NA",                bgcolor=#21262D, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 0, 8, "Last Trade Dates", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+        table.cell(infoTbl, 1, 8, "NA",                bgcolor=#21262D, text_color=#8B949E, text_size=size.small)
 
-    // Row 8: Historical Win Rate & Stats
+    // Row 9: Historical Win Rate & Stats
     string perfStr = v20_totalTrades > 0 ? str.tostring(v20_winRate, "#") + "% (" + str.tostring(v20_totalWins) + "/" + str.tostring(v20_totalTrades) + " wins, avg " + str.tostring(v20_avgHold) + "d)" : "No Trades"
     color  perfBg  = v20_winRate >= 70 ? tvGreen : v20_winRate >= 50 ? color.orange : color.new(color.black, 40)
-    table.cell(infoTbl, 0, 8, "Win Rate", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
-    table.cell(infoTbl, 1, 8, perfStr,    bgcolor=perfBg,  text_color=color.white, text_size=size.small)
+    table.cell(infoTbl, 0, 9, "Win Rate", bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+    table.cell(infoTbl, 1, 9, perfStr,    bgcolor=perfBg,  text_color=color.white, text_size=size.small)
 
-    // Row 9: HFT Bulk Buy Deals
+    // Row 10: HFT Bulk Buy Deals
     string hftStr = array.size(dealTimes) > 0 ? str.tostring(array.size(dealTimes)) + " Deals (12 Desks)" : "No HFT Deals"
-    table.cell(infoTbl, 0, 9, "HFT Buys",  bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
-    table.cell(infoTbl, 1, 9, hftStr,     bgcolor=#161B22, text_color=#7EE787, text_size=size.small)
+    table.cell(infoTbl, 0, 10, "HFT Buys",  bgcolor=#161B22, text_color=#8B949E, text_size=size.small)
+    table.cell(infoTbl, 1, 10, hftStr,     bgcolor=#161B22, text_color=#7EE787, text_size=size.small)
 """
     return script
 
