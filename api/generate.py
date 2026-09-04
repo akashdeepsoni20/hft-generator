@@ -47,9 +47,11 @@ class handler(BaseHTTPRequestHandler):
 
             hft_df = df.dropna(subset=["Matched_HFT"]).copy()
             hft_df["ParsedDate"] = pd.to_datetime(hft_df[date_col], errors="coerce")
-            hft_df = hft_df.dropna(subset=["ParsedDate"]).sort_values(by="ParsedDate")
+            hft_df = hft_df.dropna(subset=["ParsedDate"]).drop_duplicates()
 
-            grouped = hft_df.groupby(["CleanSym", "ParsedDate"])["Matched_HFT"].unique().reset_index()
+            # Group properly by symbol and date, taking unique HFT firms and sorting them
+            grouped = hft_df.groupby(["CleanSym", "ParsedDate"])["Matched_HFT"].apply(lambda x: sorted(list(set(x)))).reset_index()
+            grouped = grouped.sort_values(by="ParsedDate")
 
             sym_list = []
             time_list = []
@@ -62,12 +64,10 @@ class handler(BaseHTTPRequestHandler):
                 sym_list.append(row["CleanSym"])
                 time_list.append(str(t_val))
                 count_list.append(str(len(row["Matched_HFT"])))
-                # Escape backslashes properly for Pine Script strings
-                firms_joined = "\\n".join(row["Matched_HFT"])
-                firm_list.append(firms_joined)
+                firm_list.append("\\n".join(row["Matched_HFT"]))
 
-            # Chunk by items (e.g., 50 items per chunk) to stay well under Pine's 4096 char string limit safely
-            def make_item_chunked_str(lst, batch_size=40):
+            # Smaller batch size (25) ensures lines stay safely under TradingView's 4096 limit
+            def make_item_chunked_str(lst, batch_size=25):
                 batches = [lst[i:i+batch_size] for i in range(0, len(lst), batch_size)]
                 batch_strs = [f'"{",".join(batch)}"' for batch in batches]
                 return ' + \n         '.join(batch_strs)
