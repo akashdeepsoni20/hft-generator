@@ -20,7 +20,6 @@ TRACKED_HFTS = {
     "IRAGE": "iRage Capital",
 }
 
-
 def match_hft(client_name):
     if not isinstance(client_name, str):
         return None
@@ -30,63 +29,49 @@ def match_hft(client_name):
             return display_name
     return None
 
-
 class handler(BaseHTTPRequestHandler):
-
     def do_GET(self):
         try:
             resp = requests.get(BLOB_CSV_URL, timeout=10)
             resp.raise_for_status()
 
             df = pd.read_csv(io.StringIO(resp.text), encoding="utf-8-sig")
-            df.columns = (
-                df.columns.str.strip().str.replace('"', "").str.replace("'", "")
-            )
+            df.columns = df.columns.str.strip().str.replace('"', '').str.replace("'", '')
 
             date_col = next(c for c in df.columns if "date" in c.lower())
             symbol_col = next(c for c in df.columns if "symbol" in c.lower())
             client_col = next(c for c in df.columns if "client" in c.lower())
 
+            df["CleanSym"] = df[symbol_col].astype(str).str.strip().str.upper()
             df["Matched_HFT"] = df[client_col].apply(match_hft)
+
             hft_df = df.dropna(subset=["Matched_HFT"]).copy()
-            hft_df["ParsedDate"] = pd.to_datetime(
-                hft_df[date_col], errors="coerce"
-            )
-            hft_df = hft_df.dropna(subset=["ParsedDate"])
+            hft_df["ParsedDate"] = pd.to_datetime(hft_df[date_col], errors="coerce")
+            hft_df = hft_df.dropna(subset=["ParsedDate"]).sort_values(by="ParsedDate")
 
-            grouped = (
-                hft_df.groupby([symbol_col, "ParsedDate"])["Matched_HFT"]
-                .unique()
-                .reset_index()
-            )
+            grouped = hft_df.groupby(["CleanSym", "ParsedDate"])["Matched_HFT"].unique().reset_index()
 
-            deal_lines = []
-            for _, row in grouped.iterrows():
-                sym = str(row[symbol_col]).strip().upper()
-                dt = row["ParsedDate"]
-                firms = list(row["Matched_HFT"])
-                count = len(firms)
-                firms_str = "\\n".join(firms)
-                deal_lines.append(
-                    f'    f_addDeal(dealTimes, dealSyms, dealCount, dealFirms,'
-                    f' {dt.day:02d}, {dt.month:02d}, {dt.year}, "{sym}",'
-                    f' {count}, "{firms_str}")'
-                )
+            lines = ["    switch curSym"]
+            for sym, group in grouped.groupby("CleanSym"):
+                lines.append(f'        "{sym}" =>')
+                for _, row in group.iterrows():
+                    dt = row["ParsedDate"]
+                    firms = list(row["Matched_HFT"])
+                    count = len(firms)
+                    firms_str = "\\n".join(firms)
+                    lines.append(f'            f_add(dealTimes, dealCount, dealFirms, {dt.year}, {dt.month}, {dt.day}, {count}, "{firms_str}")')
 
-            pine_output = (
-                "\n".join(deal_lines)
-                if deal_lines
-                else "// No HFT deals detected in current CSV"
-            )
+            output = "\n".join(lines)
 
             self.send_response(200)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
             self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
-            self.wfile.write(pine_output.encode("utf-8"))
+            self.wfile.write(output.encode("utf-8"))
 
         except Exception as e:
             self.send_response(500)
             self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
-            self.wfile.write(f"Error processing CSV: {str(e)}".encode("utf-8"))
+            self.wfile.write(f"Error: {str(e)}".encode("utf-8"))
