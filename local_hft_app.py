@@ -31,10 +31,15 @@ class LocalRequestHandler(ApiHandler):
         pass  # Mute server access logs
 
 
+class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
 if __name__ == "__main__":
     print(f"Local server started at http://localhost:{PORT}")
     webbrowser.open(f"http://localhost:{PORT}")
-    with socketserver.TCPServer(("", PORT), LocalRequestHandler) as httpd:
+    with ThreadedTCPServer(("", PORT), LocalRequestHandler) as httpd:
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:

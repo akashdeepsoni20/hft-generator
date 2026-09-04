@@ -1,3 +1,4 @@
+import os
 from http.server import BaseHTTPRequestHandler
 import io
 import json
@@ -5,9 +6,24 @@ import urllib.parse
 import pandas as pd
 import requests
 
+# Auto-load .env if present
+_env_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env")
+if os.path.exists(_env_file):
+    try:
+        with open(_env_file, "r", encoding="utf-8") as _f:
+            for _line in _f:
+                _line = _line.strip()
+                if _line and not _line.startswith("#") and "=" in _line:
+                    _k, _v = _line.split("=", 1)
+                    _k = _k.strip()
+                    _v = _v.strip().strip('"').strip("'")
+                    if _k not in os.environ:
+                        os.environ[_k] = _v
+    except Exception:
+        pass
+
 BLOB_CSV_URL = "https://mywebsitecontainer.blob.core.windows.net/hft/hft.csv"
 WATCHLIST_XLSX_URL = "https://mywebsitecontainer.blob.core.windows.net/hft/watchlist.xlsx"
-WATCHLIST_CSV_URL = "https://mywebsitecontainer.blob.core.windows.net/hft/watchlist.csv"
 
 TRACKED_HFTS = {
     "JUMP TRADING": "Jump Trading",
@@ -24,6 +40,8 @@ TRACKED_HFTS = {
     "IRAGE": "iRage Capital",
 }
 
+_WATCHLIST_CACHE = None
+
 
 def match_hft(client_name):
     if not isinstance(client_name, str):
@@ -35,11 +53,15 @@ def match_hft(client_name):
     return None
 
 
-def fetch_watchlist():
-    """Fetches tracked stock symbols from Azure Blob (watchlist.xlsx or watchlist.csv)
-    with optional fallback to local watchlist file.
+def fetch_watchlist(force_reload=False):
+    """Fetches tracked stock symbols from Azure Blob (watchlist.xlsx)
+    with optional fallback to local watchlist.xlsx file.
     Returns a set of clean uppercase symbol strings, or None if no watchlist is defined.
     """
+    global _WATCHLIST_CACHE
+    if not force_reload and _WATCHLIST_CACHE is not None:
+        return _WATCHLIST_CACHE
+
     # 1. Try watchlist.xlsx from Azure Blob
     try:
         resp = requests.get(WATCHLIST_XLSX_URL, timeout=8)
@@ -50,29 +72,15 @@ def fetch_watchlist():
                 symbols = df_wl[sym_col].dropna().astype(str).str.strip().str.upper().tolist()
                 valid = {s for s in symbols if s and s != "NAN" and len(s) > 1}
                 if valid:
+                    _WATCHLIST_CACHE = valid
                     return valid
     except Exception:
         pass
 
-    # 2. Try watchlist.csv from Azure Blob
-    try:
-        resp = requests.get(WATCHLIST_CSV_URL, timeout=8)
-        if resp.status_code == 200:
-            df_wl = pd.read_csv(io.StringIO(resp.text))
-            sym_col = next((c for c in df_wl.columns if any(k in str(c).lower() for k in ["symbol", "stock", "ticker"])), df_wl.columns[0] if len(df_wl.columns) > 0 else None)
-            if sym_col:
-                symbols = df_wl[sym_col].dropna().astype(str).str.strip().str.upper().tolist()
-                valid = {s for s in symbols if s and s != "NAN" and len(s) > 1}
-                if valid:
-                    return valid
-    except Exception:
-        pass
-
-    # 3. Local fallback (if watchlist.xlsx exists in project directory)
-    import os
+    # 2. Local fallback (if watchlist.xlsx exists in project directory)
     local_dir = os.path.dirname(os.path.dirname(__file__))
     local_xlsx = os.path.join(local_dir, "watchlist.xlsx")
-    local_csv = os.path.join(local_dir, "watchlist.csv")
+
     if os.path.exists(local_xlsx):
         try:
             df_wl = pd.read_excel(local_xlsx)
@@ -81,25 +89,69 @@ def fetch_watchlist():
                 symbols = df_wl[sym_col].dropna().astype(str).str.strip().str.upper().tolist()
                 valid = {s for s in symbols if s and s != "NAN" and len(s) > 1}
                 if valid:
-                    return valid
-        except Exception:
-            pass
-    elif os.path.exists(local_csv):
-        try:
-            df_wl = pd.read_csv(local_csv)
-            sym_col = next((c for c in df_wl.columns if any(k in str(c).lower() for k in ["symbol", "stock", "ticker"])), df_wl.columns[0] if len(df_wl.columns) > 0 else None)
-            if sym_col:
-                symbols = df_wl[sym_col].dropna().astype(str).str.strip().str.upper().tolist()
-                valid = {s for s in symbols if s and s != "NAN" and len(s) > 1}
-                if valid:
+                    _WATCHLIST_CACHE = valid
                     return valid
         except Exception:
             pass
 
-    return None
+    return set()
+
+
+def save_watchlist(symbols):
+    """Saves the given list of symbols exclusively to watchlist.xlsx locally AND directly to Azure Blob
+    if connection string or SAS token is configured.
+    """
+    global _WATCHLIST_CACHE
+    clean_syms = sorted(list(set(str(s).strip().upper() for s in symbols if str(s).strip())))
+    _WATCHLIST_CACHE = set(clean_syms)
+
+    df = pd.DataFrame({"Symbol": clean_syms})
+
+    # 1. Save to local watchlist.xlsx
+    local_dir = os.path.dirname(os.path.dirname(__file__))
+    local_xlsx = os.path.join(local_dir, "watchlist.xlsx")
+    try:
+        df.to_excel(local_xlsx, index=False)
+    except Exception as e:
+        print(f"Error saving local watchlist.xlsx: {e}")
+
+    # Prepare excel bytes for Azure upload
+    xlsx_buffer = io.BytesIO()
+    df.to_excel(xlsx_buffer, index=False)
+    xlsx_bytes = xlsx_buffer.getvalue()
+
+    # 2. Save directly to Azure Blob if connection string is configured
+    conn_str = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
+    if conn_str:
+        try:
+            from azure.storage.blob import BlobClient
+            client_xlsx = BlobClient.from_connection_string(conn_str, container_name="hft", blob_name="watchlist.xlsx")
+            client_xlsx.upload_blob(xlsx_bytes, overwrite=True)
+            return {"status": "success", "storage": "azure_blob", "symbols": clean_syms, "file": "watchlist.xlsx"}
+        except Exception as e:
+            print(f"Error uploading watchlist.xlsx to Azure Blob: {e}")
+
+    # 3. Save to Azure Blob via SAS token if configured
+    sas_token = os.environ.get("AZURE_SAS_TOKEN")
+    if sas_token:
+        try:
+            sas_clean = sas_token.lstrip("?")
+            target_url_xlsx = f"{WATCHLIST_XLSX_URL}?{sas_clean}"
+            requests.put(target_url_xlsx, headers={"x-ms-blob-type": "BlockBlob"}, data=xlsx_bytes, timeout=10)
+            return {"status": "success", "storage": "azure_blob_sas", "symbols": clean_syms, "file": "watchlist.xlsx"}
+        except Exception as e:
+            print(f"Error uploading watchlist.xlsx via SAS to Azure Blob: {e}")
+    return {"status": "success", "storage": "local", "symbols": clean_syms, "file": "watchlist.xlsx"}
+
+
+_DATA_CACHE = None
 
 
 def fetch_and_process_hft_data():
+    global _DATA_CACHE
+    if _DATA_CACHE is not None:
+        return _DATA_CACHE
+
     resp = requests.get(BLOB_CSV_URL, timeout=12)
     resp.raise_for_status()
 
@@ -120,11 +172,6 @@ def fetch_and_process_hft_data():
     if bs_col:
         hft_df = hft_df[hft_df[bs_col].astype(str).str.upper().str.strip() == "BUY"].copy()
 
-    # Filter by Watchlist from Blob (or local template) if configured
-    watchlist = fetch_watchlist()
-    if watchlist:
-        hft_df = hft_df[hft_df["CleanSym"].isin(watchlist)].copy()
-
     # Optimized date parsing
     try:
         hft_df["ParsedDate"] = pd.to_datetime(hft_df[date_col], format="%d-%b-%y", errors="coerce")
@@ -139,10 +186,17 @@ def fetch_and_process_hft_data():
         .reset_index()
     )
     grouped = grouped.sort_values(by=["CleanSym", "ParsedDate"])
+    _DATA_CACHE = grouped
     return grouped
 
 
 def generate_pinescript(grouped, selected_syms=None):
+    # Fallback to Azure Blob / local watchlist if no explicit symbols were selected
+    if not selected_syms:
+        wl = fetch_watchlist()
+        if wl:
+            selected_syms = list(wl)
+
     if selected_syms and "ALL" not in [s.upper() for s in selected_syms]:
         selected_set = set(s.upper() for s in selected_syms)
         filtered_group = grouped[grouped["CleanSym"].isin(selected_set)]
@@ -651,15 +705,100 @@ class handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 return
 
+            # Watchlist Management Actions (Stored permanently on Azure Blob & local watchlist.csv)
+            action = query_params.get("action", [None])[0]
+            if action == "watchlist":
+                wl = sorted(list(fetch_watchlist() or []))
+                data = {
+                    "status": "success",
+                    "watchlist": wl,
+                    "count": len(wl),
+                    "storage": "azure_blob" if os.environ.get("AZURE_STORAGE_CONNECTION_STRING") or os.environ.get("AZURE_SAS_TOKEN") else "local"
+                }
+                body = json.dumps(data).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if action == "watchlist_add":
+                sym_raw = query_params.get("symbol", query_params.get("symbols", [""]))[0]
+                new_syms = [s.strip().upper() for s in sym_raw.split(",") if s.strip()]
+                current_wl = set(fetch_watchlist() or [])
+                current_wl.update(new_syms)
+                save_res = save_watchlist(list(current_wl))
+                data = {
+                    "status": "success",
+                    "watchlist": sorted(list(current_wl)),
+                    "count": len(current_wl),
+                    "saved_to": save_res.get("storage", "local")
+                }
+                body = json.dumps(data).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if action == "watchlist_remove":
+                sym_raw = query_params.get("symbol", query_params.get("symbols", [""]))[0]
+                rem_syms = set(s.strip().upper() for s in sym_raw.split(",") if s.strip())
+                current_wl = set(fetch_watchlist() or [])
+                current_wl.difference_update(rem_syms)
+                save_res = save_watchlist(list(current_wl))
+                data = {
+                    "status": "success",
+                    "watchlist": sorted(list(current_wl)),
+                    "count": len(current_wl),
+                    "saved_to": save_res.get("storage", "local")
+                }
+                body = json.dumps(data).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if action == "watchlist_clear":
+                save_res = save_watchlist([])
+                data = {
+                    "status": "success",
+                    "watchlist": [],
+                    "count": 0,
+                    "saved_to": save_res.get("storage", "local")
+                }
+                body = json.dumps(data).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
             grouped = fetch_and_process_hft_data()
             all_symbols = sorted(grouped["CleanSym"].unique().tolist())
 
-            # Return list of symbols for the frontend multi-select dropdown
+            # Return list of symbols and summaries for the frontend
             if query_params.get("action") == ["symbols"] or "symbols" not in query_params and "symbol" not in query_params and "application/json" in accept_header:
+                summaries = {}
+                for sym, g in grouped.groupby("CleanSym"):
+                    desks_set = sorted(list(set(d for desks in g["Matched_HFT"] for d in desks)))
+                    summaries[sym] = {
+                        "deals": len(g),
+                        "desks_count": len(desks_set),
+                        "desks": desks_set,
+                        "latest_date": g["ParsedDate"].max().strftime("%d-%b-%Y"),
+                        "first_date": g["ParsedDate"].min().strftime("%d-%b-%Y"),
+                    }
                 response_data = {
                     "status": "success",
                     "count": len(all_symbols),
                     "symbols": all_symbols,
+                    "summaries": summaries,
                 }
                 body = json.dumps(response_data).encode("utf-8")
                 self.send_response(200)

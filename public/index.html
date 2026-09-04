@@ -219,6 +219,163 @@
       border-color: #2ea043;
     }
 
+    /* Watchlist Section Styling */
+    .watchlist-section {
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid #30363d;
+    }
+    .watchlist-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .watchlist-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #58a6ff;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .watchlist-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .btn-sm {
+      font-size: 11.5px;
+      padding: 4px 10px;
+      border-radius: 4px;
+    }
+    .watchlist-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-height: 32px;
+      align-items: center;
+    }
+    .wl-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #21262d;
+      border: 1px solid #388bfd55;
+      color: #c9d1d9;
+      padding: 4px 10px;
+      border-radius: 14px;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.15s ease;
+    }
+    .wl-pill:hover {
+      border-color: #58a6ff;
+      background: #1f6feb22;
+    }
+    .wl-pill-remove {
+      cursor: pointer;
+      color: #8b949e;
+      font-weight: bold;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0 2px;
+      border-radius: 50%;
+      transition: color 0.1s ease;
+    }
+    .wl-pill-remove:hover {
+      color: #f85149;
+    }
+    .wl-empty {
+      font-size: 12px;
+      color: #8b949e;
+      font-style: italic;
+    }
+
+    /* HFT Intelligence Table */
+    .hft-table-container {
+      margin-top: 10px;
+      overflow-x: auto;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      background: #0d1117;
+    }
+    .hft-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 12.5px;
+    }
+    .hft-table th {
+      background: #161b22;
+      color: #8b949e;
+      padding: 10px 14px;
+      font-weight: 600;
+      border-bottom: 1px solid #30363d;
+      white-space: nowrap;
+    }
+    .hft-table td {
+      padding: 10px 14px;
+      border-bottom: 1px solid #21262d;
+      color: #c9d1d9;
+      vertical-align: middle;
+    }
+    .hft-table tr:hover {
+      background: #161b22;
+    }
+    .sym-col {
+      font-weight: 700;
+      color: #ffffff;
+      font-size: 13.5px;
+    }
+    .deals-col {
+      font-weight: 600;
+      color: #7ee787;
+    }
+    .desk-badge {
+      display: inline-block;
+      background: #1f6feb1e;
+      border: 1px solid #388bfd44;
+      color: #58a6ff;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 11px;
+      margin: 2px 3px 2px 0;
+      white-space: nowrap;
+    }
+    .btn-wl {
+      padding: 5px 12px;
+      font-size: 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 600;
+      border: 1px solid transparent;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .btn-wl.add-wl {
+      background: #1f6feb;
+      color: #ffffff;
+      border-color: #388bfd;
+    }
+    .btn-wl.add-wl:hover {
+      background: #388bfd;
+    }
+    .btn-wl.in-wl {
+      background: #238636;
+      color: #ffffff;
+      border-color: #2ea043;
+    }
+    .btn-wl.in-wl:hover {
+      background: #da3633;
+      border-color: #f85149;
+    }
+
     button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
@@ -273,7 +430,7 @@
     </div>
 
     <div class="card">
-      <label for="stockSelect">Choose Stocks (Search or Multi-Select):</label>
+      <label for="stockSelect">Choose Stocks (Search or Multi-Select from all HFT stocks):</label>
       <select id="stockSelect" multiple style="width: 100%;">
         <!-- Populated dynamically from API -->
       </select>
@@ -282,11 +439,56 @@
         <button id="btnGenerate" class="btn-primary" onclick="generateScript()">
           ⚡ Generate Pine Script
         </button>
-        <button class="btn-secondary" onclick="selectAll()">Select All</button>
+        <button class="btn-secondary" onclick="loadWatchlistIntoDropdown()">🎯 Load My Watchlist</button>
+        <button class="btn-secondary" onclick="addSelectedToWatchlist()">➕ Add to Watchlist</button>
         <button class="btn-secondary" onclick="clearAll()">Clear</button>
         <button id="btnCopy" class="btn-copy" onclick="copyCode()">
           📋 Copy Code
         </button>
+      </div>
+
+      <!-- Selected Stocks HFT Deal Intelligence Table -->
+      <div id="selectionTableSection" style="margin-top: 18px; display: none;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <label style="margin: 0; color: #58a6ff;">📊 Selected Stock(s) — HFT Deal Intelligence:</label>
+          <span id="selectedCountBadge" style="font-size: 12px; color: #8b949e;"></span>
+        </div>
+        <div class="hft-table-container">
+          <table class="hft-table">
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>HFT Buy Deals</th>
+                <th>Participating Desks</th>
+                <th>Latest Buy Date</th>
+                <th>First Buy Date</th>
+                <th>Watchlist Action</th>
+              </tr>
+            </thead>
+            <tbody id="selectedTableBody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Interactive Watchlist Section -->
+      <div class="watchlist-section">
+        <div class="watchlist-header">
+          <div class="watchlist-title">
+            <span>⭐ My Azure Blob Watchlist (<span id="watchlistCount">0</span> stocks)</span>
+            <span id="watchlistSyncBadge" class="badge" style="font-size: 11px; padding: 2px 8px; font-weight: normal; color: #58a6ff;">☁️ Syncing with Blob...</span>
+          </div>
+          <div class="watchlist-actions">
+            <button class="btn-secondary btn-sm" onclick="generateForWatchlist()">⚡ Generate for Watchlist</button>
+            <button class="btn-secondary btn-sm" onclick="downloadWatchlistExcel()">📥 Download watchlist.xlsx</button>
+            <button class="btn-secondary btn-sm" onclick="clearWatchlist()">🗑️ Clear</button>
+          </div>
+        </div>
+        <div id="watchlistToast" style="display: none; font-size: 12px; margin-bottom: 8px; padding: 6px 12px; border-radius: 4px; transition: all 0.2s ease;"></div>
+        <div id="watchlistPills" class="watchlist-pills">
+          <!-- Dynamic stock pills -->
+        </div>
       </div>
     </div>
 
@@ -306,12 +508,14 @@
   <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
   <script>
     let allSymbols = [];
+    let stockSummaries = {};
+    let myWatchlist = [];
 
-    $(document).ready(function() {
+    $(document).ready(async function() {
       const $select = $('#stockSelect');
 
       $select.select2({
-        placeholder: "Search and select stocks (e.g. 5PAISA, ANGELONE)...",
+        placeholder: "Search and select stocks (e.g. 5PAISA, ANGELONE, RICOAUTO)...",
         allowClear: true,
         closeOnSelect: true
       });
@@ -323,8 +527,306 @@
         }, 10);
       });
 
-      initSymbols();
+      $select.on('change', function() {
+        renderSelectedTable();
+      });
+
+      await loadWatchlist();
+      await initSymbols();
     });
+
+    function showWatchlistToast(msg, type = "success") {
+      const toast = document.getElementById("watchlistToast");
+      if (!toast) return;
+      toast.innerText = msg;
+      toast.style.display = "block";
+      if (type === "success") {
+        toast.style.background = "#1f6feb2a";
+        toast.style.border = "1px solid #388bfd";
+        toast.style.color = "#79c0ff";
+      } else if (type === "info") {
+        toast.style.background = "#161b22";
+        toast.style.border = "1px solid #30363d";
+        toast.style.color = "#8b949e";
+      } else {
+        toast.style.background = "#da36332a";
+        toast.style.border = "1px solid #f85149";
+        toast.style.color = "#ff7b72";
+      }
+      setTimeout(() => {
+        toast.style.display = "none";
+      }, 3500);
+    }
+
+    async function loadWatchlist() {
+      const syncBadge = document.getElementById("watchlistSyncBadge");
+      if (syncBadge) {
+        syncBadge.innerText = "☁️ Syncing with Blob...";
+        syncBadge.style.color = "#e3b341";
+      }
+
+      try {
+        const res = await fetch("/api/generate?action=watchlist");
+        if (res.ok) {
+          const data = await res.json();
+          if (data && Array.isArray(data.watchlist)) {
+            myWatchlist = data.watchlist;
+            saveWatchlistToLocalBackup();
+            if (syncBadge) {
+              syncBadge.innerText = data.storage === "azure_blob" || data.storage === "azure_blob_sas" 
+                ? "☁️ Azure Blob Synced" 
+                : "💾 Cloud / Server Synced";
+              syncBadge.style.color = "#7ee787";
+            }
+            renderWatchlist();
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn("Could not load watchlist from server, falling back to local storage:", err);
+      }
+
+      // Offline fallback
+      try {
+        const saved = localStorage.getItem("hft_user_watchlist");
+        if (saved) {
+          myWatchlist = JSON.parse(saved);
+        }
+      } catch (e) {}
+
+      if (syncBadge) {
+        syncBadge.innerText = "💾 Local Cache";
+        syncBadge.style.color = "#8b949e";
+      }
+      renderWatchlist();
+    }
+
+    function saveWatchlistToLocalBackup() {
+      try {
+        localStorage.setItem("hft_user_watchlist", JSON.stringify(myWatchlist));
+      } catch (e) {}
+    }
+
+    function renderWatchlist() {
+      const container = document.getElementById("watchlistPills");
+      const countLabel = document.getElementById("watchlistCount");
+      if (countLabel) countLabel.innerText = myWatchlist.length;
+
+      container.innerHTML = "";
+      if (myWatchlist.length === 0) {
+        container.innerHTML = '<span class="wl-empty">Your watchlist is empty. Search stocks above and click "➕ Add to Watchlist".</span>';
+        return;
+      }
+
+      myWatchlist.forEach(sym => {
+        const pill = document.createElement("span");
+        pill.className = "wl-pill";
+        pill.innerHTML = `<span>${sym}</span> <span class="wl-pill-remove" onclick="removeStockFromWatchlist('${sym}')" title="Remove ${sym}">×</span>`;
+        container.appendChild(pill);
+      });
+    }
+
+    async function addSingleStockToWatchlist(sym) {
+      const up = sym.toUpperCase().trim();
+      if (!up) return;
+      if (myWatchlist.includes(up)) {
+        showWatchlistToast(`${up} is already in your watchlist.`, "info");
+        return;
+      }
+
+      showWatchlistToast(`Saving ${up} permanently to Blob watchlist...`, "info");
+      try {
+        const res = await fetch("/api/generate?action=watchlist_add&symbol=" + encodeURIComponent(up));
+        if (res.ok) {
+          const data = await res.json();
+          if (data && Array.isArray(data.watchlist)) {
+            myWatchlist = data.watchlist;
+            saveWatchlistToLocalBackup();
+            renderWatchlist();
+            renderSelectedTable();
+            showWatchlistToast(`✓ Saved ${up} permanently to Blob Watchlist!`, "success");
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to persist to Blob:", err);
+      }
+
+      // Local fallback if server unreachable
+      myWatchlist.push(up);
+      saveWatchlistToLocalBackup();
+      renderWatchlist();
+      renderSelectedTable();
+      showWatchlistToast(`✓ Saved ${up} locally (Server unreachable)`, "success");
+    }
+
+    async function addSelectedToWatchlist() {
+      const selected = $('#stockSelect').val() || [];
+      if (selected.length === 0) {
+        alert("Please select one or more stocks from the dropdown above to add to your watchlist!");
+        return;
+      }
+
+      const toAdd = selected.map(s => s.toUpperCase().trim()).filter(s => !myWatchlist.includes(s));
+      if (toAdd.length === 0) {
+        alert("All selected stocks are already in your watchlist!");
+        return;
+      }
+
+      showWatchlistToast(`Saving ${toAdd.length} stock(s) permanently to Blob watchlist...`, "info");
+      try {
+        const res = await fetch("/api/generate?action=watchlist_add&symbols=" + encodeURIComponent(toAdd.join(",")));
+        if (res.ok) {
+          const data = await res.json();
+          if (data && Array.isArray(data.watchlist)) {
+            myWatchlist = data.watchlist;
+            saveWatchlistToLocalBackup();
+            renderWatchlist();
+            renderSelectedTable();
+            showWatchlistToast(`✓ Added ${toAdd.length} new stock(s) permanently to Blob! Total: ${myWatchlist.length}`, "success");
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to persist batch to Blob:", err);
+      }
+
+      // Local fallback
+      toAdd.forEach(s => myWatchlist.push(s));
+      saveWatchlistToLocalBackup();
+      renderWatchlist();
+      renderSelectedTable();
+      showWatchlistToast(`✓ Added ${toAdd.length} new stock(s) locally. Total: ${myWatchlist.length}`, "success");
+    }
+
+    async function removeStockFromWatchlist(sym) {
+      const up = sym.toUpperCase().trim();
+      showWatchlistToast(`Removing ${up} from Blob watchlist...`, "info");
+      try {
+        const res = await fetch("/api/generate?action=watchlist_remove&symbol=" + encodeURIComponent(up));
+        if (res.ok) {
+          const data = await res.json();
+          if (data && Array.isArray(data.watchlist)) {
+            myWatchlist = data.watchlist;
+            saveWatchlistToLocalBackup();
+            renderWatchlist();
+            renderSelectedTable();
+            showWatchlistToast(`✓ Removed ${up} from Blob Watchlist!`, "success");
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to delete from Blob:", err);
+      }
+
+      myWatchlist = myWatchlist.filter(s => s !== up);
+      saveWatchlistToLocalBackup();
+      renderWatchlist();
+      renderSelectedTable();
+      showWatchlistToast(`✓ Removed ${up} from Watchlist!`, "success");
+    }
+
+    async function clearWatchlist() {
+      if (myWatchlist.length === 0) return;
+      if (confirm("Are you sure you want to clear your saved watchlist permanently from Azure Blob?")) {
+        showWatchlistToast("Clearing Blob watchlist...", "info");
+        try {
+          const res = await fetch("/api/generate?action=watchlist_clear");
+          if (res.ok) {
+            myWatchlist = [];
+            saveWatchlistToLocalBackup();
+            renderWatchlist();
+            renderSelectedTable();
+            showWatchlistToast("✓ Azure Blob watchlist cleared!", "success");
+            return;
+          }
+        } catch (err) {
+          console.error("Failed to clear Blob:", err);
+        }
+
+        myWatchlist = [];
+        saveWatchlistToLocalBackup();
+        renderWatchlist();
+        renderSelectedTable();
+        showWatchlistToast("✓ Watchlist cleared!", "success");
+      }
+    }
+
+    function renderSelectedTable() {
+      const selected = $('#stockSelect').val() || [];
+      const section = document.getElementById("selectionTableSection");
+      const tbody = document.getElementById("selectedTableBody");
+      const countBadge = document.getElementById("selectedCountBadge");
+
+      if (selected.length === 0) {
+        section.style.display = "none";
+        tbody.innerHTML = "";
+        return;
+      }
+
+      section.style.display = "block";
+      countBadge.innerText = `${selected.length} stock(s) selected`;
+      tbody.innerHTML = "";
+
+      selected.forEach(sym => {
+        const info = stockSummaries[sym] || {
+          deals: 0,
+          desks_count: 0,
+          desks: [],
+          latest_date: "NA",
+          first_date: "NA"
+        };
+
+        const inWl = myWatchlist.includes(sym);
+        const row = document.createElement("tr");
+
+        let desksHtml = "";
+        if (info.desks && info.desks.length > 0) {
+          const preview = info.desks.slice(0, 4);
+          desksHtml = preview.map(d => `<span class="desk-badge">${d}</span>`).join("");
+          if (info.desks.length > 4) {
+            desksHtml += `<span class="desk-badge" style="background:#30363d; color:#8b949e;">+${info.desks.length - 4} more</span>`;
+          }
+        } else {
+          desksHtml = '<span style="color:#8b949e;">No deals tracked</span>';
+        }
+
+        const actionBtnHtml = inWl 
+          ? `<button class="btn-wl in-wl" onclick="removeStockFromWatchlist('${sym}')" title="Click to remove from Watchlist">⭐ In Watchlist</button>`
+          : `<button class="btn-wl add-wl" onclick="addSingleStockToWatchlist('${sym}')" title="Click to add to your Watchlist">➕ Add to Watchlist</button>`;
+
+        row.innerHTML = `
+          <td class="sym-col">${sym}</td>
+          <td class="deals-col">${info.deals > 0 ? info.deals + ' Buy Days' : '0 Deals'}</td>
+          <td>${info.desks_count > 0 ? '<b>' + info.desks_count + ' Desks:</b> ' : ''}${desksHtml}</td>
+          <td>${info.latest_date}</td>
+          <td>${info.first_date}</td>
+          <td>${actionBtnHtml}</td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    function loadWatchlistIntoDropdown() {
+      if (myWatchlist.length === 0) {
+        alert("Your watchlist is currently empty!");
+        return;
+      }
+      $('#stockSelect').val(myWatchlist).trigger('change');
+    }
+
+    function generateForWatchlist() {
+      if (myWatchlist.length === 0) {
+        alert("Your watchlist is currently empty! Search and add stocks first.");
+        return;
+      }
+      $('#stockSelect').val(myWatchlist).trigger('change');
+      generateScript();
+    }
+
+    function downloadWatchlistExcel() {
+      window.open("https://mywebsitecontainer.blob.core.windows.net/hft/watchlist.xlsx", "_blank");
+    }
 
     async function initSymbols() {
       const badge = document.getElementById("statusBadge");
@@ -337,6 +839,8 @@
         const data = await res.json();
         
         allSymbols = data.symbols || [];
+        stockSummaries = data.summaries || {};
+
         const select = $('#stockSelect');
         select.empty();
 
@@ -347,8 +851,11 @@
         badge.className = "badge";
         badge.innerText = `✓ ${allSymbols.length} stocks with HFT Buys (12 Desks)`;
 
-        // Pre-select first 3 stocks if available to provide an instant demo script
-        if (allSymbols.length > 0) {
+        // Pre-select user's saved watchlist if available, else first 3 stocks
+        if (myWatchlist.length > 0) {
+          select.val(myWatchlist).trigger('change');
+          generateScript();
+        } else if (allSymbols.length > 0) {
           const defaults = allSymbols.slice(0, 3);
           select.val(defaults).trigger('change');
           generateScript();
