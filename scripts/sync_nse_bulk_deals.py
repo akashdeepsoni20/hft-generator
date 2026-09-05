@@ -267,7 +267,16 @@ def sync_bulk_deals(dry_run=False):
         print("[i] No tracked HFT institutional desks in new deals.")
 
     if len(new_deals_df) == 0:
-        print(f"\n[OK] Azure Blob {blob_file_name} is already completely up to date. No upload required.")
+        print(f"\n[OK] Azure Blob {blob_file_name} is already completely up to date with today's deals.")
+        try:
+            blob_client.set_blob_metadata({
+                "last_synced_utc": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+                "latest_trade_date": trade_date_str,
+                "deals_count": str(len(existing_df))
+            })
+            print(f"[OK] Refreshed Azure Blob timestamp & metadata (Deals: {len(existing_df):,}, Latest Date: {trade_date_str}).")
+        except Exception as e:
+            print(f"[Warning] Could not set blob metadata: {e}")
         return
 
     # 5. Combine and Upload to Azure Blob
@@ -287,7 +296,15 @@ def sync_bulk_deals(dry_run=False):
     combined_df.to_csv(csv_buffer, index=False, encoding="utf-8-sig")
     csv_bytes = csv_buffer.getvalue()
 
-    blob_client.upload_blob(csv_bytes, overwrite=True)
+    blob_client.upload_blob(
+        csv_bytes,
+        overwrite=True,
+        metadata={
+            "last_synced_utc": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+            "latest_trade_date": trade_date_str,
+            "deals_count": str(len(combined_df))
+        }
+    )
     print(f"[OK] SUCCESS: Azure Blob {blob_file_name} updated! Total deals now: {len(combined_df):,}")
 
 
