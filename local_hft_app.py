@@ -37,8 +37,11 @@ class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
 
 
 if __name__ == "__main__":
-    print(f"Local server started at http://localhost:{PORT}")
-    webbrowser.open(f"http://localhost:{PORT}")
+    print(f"Local server started at http://localhost:{PORT}", flush=True)
+    try:
+        webbrowser.open(f"http://localhost:{PORT}")
+    except Exception:
+        pass
     with ThreadedTCPServer(("", PORT), LocalRequestHandler) as httpd:
         try:
             httpd.serve_forever()

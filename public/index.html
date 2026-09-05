@@ -2,103 +2,662 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>HFT + V20 Confluence → Pine Script Generator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>NSE Bulk Deal Tracker & HFT Confluence Engine</title>
+  
+  <!-- Modern Typography: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  
   <!-- Select2 CSS -->
   <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+
   <style>
-    * { box-sizing: border-box; }
-    body {
-      background: #0d1117;
-      color: #c9d1d9;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+    :root {
+      --bg-main: #0a0e17;
+      --bg-card: #121824;
+      --bg-card-hover: #172030;
+      --bg-subtle: #1a2336;
+      --border-color: #232f45;
+      --border-focus: #3b82f6;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-glow: rgba(37, 99, 235, 0.25);
+      --success: #10b981;
+      --success-bg: rgba(16, 185, 129, 0.12);
+      --success-border: rgba(16, 185, 129, 0.3);
+      --danger: #f43f5e;
+      --danger-bg: rgba(244, 63, 94, 0.12);
+      --danger-border: rgba(244, 63, 94, 0.3);
+      --amber: #f59e0b;
+      --amber-bg: rgba(245, 158, 11, 0.12);
+      --purple: #8b5cf6;
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      --font-mono: "JetBrains Mono", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
       margin: 0;
-      padding: 24px 16px;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-main);
+      color: var(--text-primary);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
       display: flex;
-      justify-content: center;
+      flex-direction: column;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
     }
-    .container {
-      width: 100%;
-      max-width: 960px;
+
+    /* Top Navigation & App Header */
+    .app-header {
+      background: rgba(18, 24, 36, 0.95);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      padding: 12px 16px;
     }
-    .header {
+
+    .header-top-row {
+      max-width: 1400px;
+      margin: 0 auto;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 20px;
       flex-wrap: wrap;
       gap: 12px;
     }
-    .title-area h1 {
-      font-size: 20px;
-      color: #58a6ff;
-      margin: 0 0 4px 0;
-      font-weight: 700;
-    }
-    .title-area p {
-      margin: 0;
-      font-size: 13px;
-      color: #8b949e;
-    }
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      padding: 4px 10px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 600;
-      background: #161b22;
-      border: 1px solid #30363d;
-      color: #7ee787;
-    }
-    .badge.loading {
-      color: #e3b341;
+
+    .brand-title {
+      display: flex;
+      flex-direction: column;
     }
 
+    .brand-title h1 {
+      font-size: 19px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .brand-title h1 span.accent {
+      background: linear-gradient(135deg, #60a5fa, #3b82f6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-meta {
+      font-size: 12px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 2px;
+      flex-wrap: wrap;
+    }
+
+    .brand-meta span.dot {
+      display: inline-block;
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--text-muted);
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .year-selector-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg-main);
+      padding: 4px 10px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
+    }
+
+    .year-label {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #60a5fa;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .year-select {
+      background: transparent;
+      color: #ffffff;
+      font-weight: 600;
+      font-size: 13px;
+      border: none;
+      outline: none;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .year-select option {
+      background: #121824;
+      color: #ffffff;
+    }
+
+    .status-badge {
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 20px;
+      background: var(--success-bg);
+      color: var(--success);
+      border: 1px solid var(--success-border);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .status-badge.loading {
+      background: var(--amber-bg);
+      color: var(--amber);
+      border-color: rgba(245, 158, 11, 0.3);
+    }
+
+    /* Tabs Bar */
+    .tabs-nav-bar {
+      max-width: 1400px;
+      margin: 10px auto 0 auto;
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+      border-bottom: 1px solid transparent;
+    }
+    .tabs-nav-bar::-webkit-scrollbar { display: none; }
+
+    .tab-btn {
+      background: transparent;
+      color: var(--text-secondary);
+      border: none;
+      font-family: inherit;
+      font-size: 13.5px;
+      font-weight: 600;
+      padding: 9px 16px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      white-space: nowrap;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      transition: all 0.15s ease;
+      position: relative;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-primary);
+      background: var(--bg-subtle);
+    }
+
+    .tab-btn.active {
+      color: #ffffff;
+      background: var(--bg-subtle);
+    }
+
+    .tab-btn.active::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 12px;
+      right: 12px;
+      height: 3px;
+      background: #3b82f6;
+      border-radius: 3px 3px 0 0;
+    }
+
+    /* Main Content Wrapper */
+    .main-wrapper {
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 20px 16px 40px 16px;
+      flex: 1;
+    }
+
+    .tab-pane {
+      display: none;
+      animation: fadeIn 0.18s ease-in-out;
+    }
+
+    .tab-pane.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Standard Card Container */
     .card {
-      background: #161b22;
-      border: 1px solid #30363d;
-      border-radius: 8px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
       padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+    }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .card-title {
+      font-size: 15.5px;
+      font-weight: 700;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* HFT Deals Explorer Top Search Box */
+    .search-hero-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      margin-bottom: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .search-input-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .search-select-wrap {
+      flex: 1;
+      min-width: 280px;
+    }
+
+    /* Entity Profile Header (Matches Screenshot) */
+    .entity-hero {
+      background: linear-gradient(180deg, #162032 0%, var(--bg-card) 100%);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 22px;
       margin-bottom: 20px;
     }
 
-    label {
+    .entity-title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+
+    .entity-name {
+      font-size: 22px;
+      font-weight: 800;
+      color: #ffffff;
+      letter-spacing: -0.02em;
+    }
+
+    .entity-subtitle {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+    }
+
+    .pill-stats-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .stat-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 12.5px;
+      font-weight: 600;
+      background: var(--bg-subtle);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+    }
+
+    .stat-pill.pill-buysell {
+      background: rgba(37, 99, 235, 0.15);
+      border-color: rgba(59, 130, 246, 0.35);
+      color: #93c5fd;
+    }
+
+    .stat-pill.pill-stocks {
+      background: rgba(16, 185, 129, 0.12);
+      border-color: rgba(16, 185, 129, 0.3);
+      color: #6ee7b7;
+    }
+
+    .stat-pill.pill-turnover {
+      background: rgba(139, 92, 246, 0.12);
+      border-color: rgba(139, 92, 246, 0.3);
+      color: #c4b5fd;
+    }
+
+    /* Deals Filter Toolbar */
+    .filter-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .side-filter-group {
+      display: inline-flex;
+      background: var(--bg-main);
+      padding: 3px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
+    }
+
+    .side-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      padding: 6px 14px;
+      font-size: 12.5px;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+
+    .side-btn.active {
+      background: #2563eb;
+      color: #ffffff;
+    }
+
+    .side-btn.active.buy-active {
+      background: #10b981;
+      color: #ffffff;
+    }
+
+    .side-btn.active.sell-active {
+      background: #f43f5e;
+      color: #ffffff;
+    }
+
+    .stock-search-input {
+      background: var(--bg-main);
+      border: 1px solid var(--border-color);
+      color: #ffffff;
+      font-size: 13px;
+      padding: 8px 14px;
+      border-radius: var(--radius-md);
+      outline: none;
+      font-family: inherit;
+    }
+
+    .stock-search-input:focus {
+      border-color: var(--border-focus);
+    }
+
+    /* Deals Table Matching Screenshot */
+    .deals-table-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .deals-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 13px;
+    }
+
+    .deals-table th {
+      background: #101623;
+      color: var(--text-secondary);
+      padding: 12px 16px;
+      font-weight: 600;
+      border-bottom: 1px solid var(--border-color);
+      white-space: nowrap;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .deals-table td {
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(35, 47, 69, 0.6);
+      color: var(--text-primary);
+      vertical-align: middle;
+    }
+
+    .deals-table tr:hover td {
+      background: var(--bg-card-hover);
+    }
+
+    .td-date {
+      color: var(--text-secondary);
+      white-space: nowrap;
+      font-size: 12.5px;
+    }
+
+    .td-symbol {
+      font-weight: 700;
+      color: #60a5fa;
+      font-size: 13.5px;
+      font-family: var(--font-mono);
+      white-space: nowrap;
+    }
+
+    .td-company {
+      color: #e2e8f0;
+      font-weight: 500;
+      max-width: 280px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .side-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      min-width: 48px;
+    }
+
+    .side-badge.buy {
+      background: var(--success-bg);
+      color: #34d399;
+      border: 1px solid var(--success-border);
+    }
+
+    .side-badge.sell {
+      background: var(--danger-bg);
+      color: #fb7185;
+      border: 1px solid var(--danger-border);
+    }
+
+    .td-qty {
+      font-family: var(--font-mono);
+      font-weight: 500;
+      color: #cbd5e1;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .td-price {
+      font-family: var(--font-mono);
+      font-weight: 500;
+      color: #cbd5e1;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .td-val {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      color: #f8fafc;
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .td-remarks {
+      color: var(--text-muted);
+      font-size: 11.5px;
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .table-empty {
+      padding: 40px 20px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    /* Buttons & Controls */
+    .btn {
+      font-family: inherit;
       font-size: 13px;
       font-weight: 600;
-      color: #c9d1d9;
-      display: block;
-      margin-bottom: 8px;
+      padding: 8px 16px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      border: 1px solid transparent;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+      white-space: nowrap;
     }
 
-    /* Select2 Dark Theme Styling */
+    .btn-primary {
+      background: var(--primary);
+      color: #ffffff;
+      box-shadow: 0 2px 10px var(--primary-glow);
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+    }
+
+    .btn-secondary {
+      background: var(--bg-subtle);
+      color: var(--text-primary);
+      border-color: var(--border-color);
+    }
+    .btn-secondary:hover:not(:disabled) {
+      background: var(--bg-card-hover);
+      border-color: #3b82f6;
+    }
+
+    .btn-sm {
+      padding: 5px 10px;
+      font-size: 12px;
+      border-radius: var(--radius-sm);
+    }
+
+    /* ============================================================ */
+    /* Select2 DARK THEME FIXES: SINGLE & MULTIPLE CONTROLS         */
+    /* ============================================================ */
+    .select2-container--default .select2-selection--single {
+      background-color: var(--bg-main) !important;
+      border: 1px solid var(--border-color) !important;
+      border-radius: var(--radius-md) !important;
+      height: 44px !important;
+      display: flex !important;
+      align-items: center !important;
+    }
+
+    .select2-container--default .select2-selection--single .select2-selection__rendered {
+      color: #f1f5f9 !important;
+      font-size: 13.5px !important;
+      font-weight: 600 !important;
+      padding-left: 14px !important;
+    }
+
+    .select2-container--default .select2-selection--single .select2-selection__arrow {
+      height: 42px !important;
+      right: 10px !important;
+    }
+
+    /* SELECT2 MULTIPLE DARK THEME (FIXES WHITE BOX ISSUE) */
     .select2-container--default .select2-selection--multiple {
-      background-color: #0d1117;
-      border: 1px solid #30363d;
-      border-radius: 6px;
-      min-height: 42px;
-      padding: 4px 8px;
-      color: #c9d1d9;
-    }
-    .select2-container--default.select2-container--focus .select2-selection--multiple {
-      border-color: #58a6ff;
+      background-color: #0a0e17 !important;
+      border: 1px solid #232f45 !important;
+      border-radius: var(--radius-md) !important;
+      min-height: 46px !important;
+      padding: 4px 8px !important;
+      color: #f1f5f9 !important;
+      cursor: text !important;
     }
 
-    /* Fixed Tag Pill Styling - No overlap */
+    .select2-container--default.select2-container--focus .select2-selection--multiple {
+      border-color: #3b82f6 !important;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25) !important;
+    }
+
     .select2-container--default .select2-selection--multiple .select2-selection__choice {
       display: inline-flex !important;
       align-items: center !important;
       flex-direction: row !important;
-      background-color: #1f6feb !important;
-      border: 1px solid #388bfd !important;
+      background-color: #1e293b !important;
+      border: 1px solid #3b82f6 !important;
       color: #ffffff !important;
       border-radius: 6px !important;
-      padding: 3px 4px 3px 8px !important;
+      padding: 4px 8px !important;
       font-size: 12.5px !important;
-      font-weight: 500 !important;
+      font-family: var(--font-mono) !important;
+      font-weight: 600 !important;
       margin: 4px 6px 4px 0 !important;
-      line-height: 1.4 !important;
-      position: relative !important;
+      line-height: 1.3 !important;
     }
 
     .select2-container--default .select2-selection--multiple .select2-selection__choice__display {
@@ -113,826 +672,2074 @@
       float: none !important;
       background: transparent !important;
       border: none !important;
-      color: rgba(255, 255, 255, 0.75) !important;
+      color: #94a3b8 !important;
       padding: 0 4px !important;
       margin: 0 !important;
       font-size: 14px !important;
       font-weight: 700 !important;
       cursor: pointer !important;
       border-radius: 4px !important;
-      transition: all 0.15s ease !important;
       order: 2 !important;
     }
 
     .select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
-      background-color: rgba(248, 81, 73, 0.3) !important;
-      color: #ff7b72 !important;
+      background-color: rgba(244, 63, 94, 0.25) !important;
+      color: #f43f5e !important;
+    }
+
+    .select2-container--default .select2-search--inline {
+      display: inline-block !important;
+      margin: 4px 0 !important;
     }
 
     .select2-container--default .select2-search--inline .select2-search__field {
-      color: #c9d1d9;
-      font-family: inherit;
-      margin-top: 6px;
-      font-size: 13px;
+      color: #ffffff !important;
+      font-family: 'Inter', sans-serif !important;
+      font-size: 13.5px !important;
+      margin-top: 2px !important;
+      margin-left: 6px !important;
+      background: transparent !important;
+      border: none !important;
+      outline: none !important;
+      min-width: 180px !important;
     }
 
-    /* Elevated Floating Dropdown */
+    .select2-container--default .select2-search--inline .select2-search__field::placeholder {
+      color: #64748b !important;
+    }
+
+    /* SELECT2 DROPDOWN POPUP */
     .select2-dropdown {
-      background-color: #1c2128 !important;
-      border: 1px solid #444c56 !important;
-      border-radius: 8px !important;
-      color: #c9d1d9 !important;
-      box-shadow: 0 16px 32px rgba(0, 0, 0, 0.6) !important;
-      z-index: 99999 !important;
-      overflow: hidden !important;
+      background-color: #121824 !important;
+      border: 1px solid #2e3d59 !important;
+      border-radius: var(--radius-md) !important;
+      box-shadow: 0 16px 32px rgba(0,0,0,0.6) !important;
+      z-index: 999999 !important;
+    }
+
+    .select2-container--default .select2-search--dropdown .select2-search__field {
+      background-color: #0a0e17 !important;
+      border: 1px solid #2e3d59 !important;
+      border-radius: var(--radius-sm) !important;
+      color: #ffffff !important;
+      padding: 8px 12px !important;
+      font-size: 13px !important;
     }
 
     .select2-container--default .select2-results__option {
-      padding: 9px 14px !important;
+      padding: 10px 14px !important;
       font-size: 13px !important;
-      color: #adbac7 !important;
-      transition: background 0.1s ease;
+      color: #cbd5e1 !important;
     }
 
     .select2-container--default .select2-results__option--highlighted[aria-selected] {
-      background-color: #1f6feb !important;
+      background-color: #2563eb !important;
       color: #ffffff !important;
     }
 
     .select2-container--default .select2-results__option[aria-selected=true] {
-      background-color: #2d333b !important;
-      color: #768390 !important;
+      background-color: #1e293b !important;
+      color: #94a3b8 !important;
     }
 
-    .btn-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 16px;
-      align-items: center;
+    /* Pine Script Code Output Area */
+    .code-output-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
     }
 
-    button {
-      font-family: inherit;
-      font-size: 13px;
-      font-weight: 600;
-      padding: 8px 16px;
-      border-radius: 6px;
-      cursor: pointer;
-      border: 1px solid transparent;
-      transition: all 0.15s ease;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .btn-primary {
-      background: #238636;
-      color: #ffffff;
-      border-color: #2ea043;
-    }
-    .btn-primary:hover:not(:disabled) {
-      background: #2ea043;
-    }
-
-    .btn-secondary {
-      background: #21262d;
-      color: #c9d1d9;
-      border-color: #30363d;
-    }
-    .btn-secondary:hover:not(:disabled) {
-      background: #30363d;
-      color: #ffffff;
-    }
-
-    .btn-copy {
-      background: #1f6feb;
-      color: #ffffff;
-      border-color: #388bfd;
-      margin-left: auto;
-    }
-    .btn-copy:hover:not(:disabled) {
-      background: #388bfd;
-    }
-    .btn-copy.copied {
-      background: #238636;
-      border-color: #2ea043;
-    }
-
-    /* Watchlist Section Styling */
-    .watchlist-section {
-      margin-top: 18px;
-      padding-top: 16px;
-      border-top: 1px solid #30363d;
-    }
-    .watchlist-header {
+    .code-output-header {
+      background: #0f1521;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border-color);
       display: flex;
       justify-content: space-between;
       align-items: center;
       flex-wrap: wrap;
-      gap: 8px;
-      margin-bottom: 12px;
+      gap: 10px;
     }
-    .watchlist-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: #58a6ff;
-      display: flex;
-      align-items: center;
-      gap: 6px;
+
+    .code-textarea {
+      width: 100%;
+      height: 480px;
+      background: #0a0e17;
+      color: #34d399;
+      border: none;
+      padding: 16px;
+      font-family: var(--font-mono);
+      font-size: 12.5px;
+      line-height: 1.55;
+      resize: vertical;
+      outline: none;
     }
-    .watchlist-actions {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    .btn-sm {
-      font-size: 11.5px;
-      padding: 4px 10px;
-      border-radius: 4px;
-    }
-    .watchlist-pills {
+
+    /* Watchlist Pills */
+    .wl-pills-container {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
-      min-height: 32px;
-      align-items: center;
+      gap: 8px;
+      min-height: 60px;
+      padding: 14px;
+      background: var(--bg-main);
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-color);
     }
-    .wl-pill {
+
+    .wl-stock-badge {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      background: #21262d;
-      border: 1px solid #388bfd55;
-      color: #c9d1d9;
-      padding: 4px 10px;
-      border-radius: 14px;
-      font-size: 12px;
-      font-weight: 500;
+      background: var(--bg-card);
+      border: 1px solid #3b82f644;
+      padding: 6px 12px;
+      border-radius: 20px;
+      font-size: 12.5px;
+      font-family: var(--font-mono);
+      font-weight: 600;
+      color: #e2e8f0;
       transition: all 0.15s ease;
-    }
-    .wl-pill:hover {
-      border-color: #58a6ff;
-      background: #1f6feb22;
-    }
-    .wl-pill-remove {
-      cursor: pointer;
-      color: #8b949e;
-      font-weight: bold;
-      font-size: 14px;
-      line-height: 1;
-      padding: 0 2px;
-      border-radius: 50%;
-      transition: color 0.1s ease;
-    }
-    .wl-pill-remove:hover {
-      color: #f85149;
-    }
-    .wl-empty {
-      font-size: 12px;
-      color: #8b949e;
-      font-style: italic;
     }
 
-    /* HFT Intelligence Table */
-    .hft-table-container {
-      margin-top: 10px;
-      overflow-x: auto;
-      border: 1px solid #30363d;
-      border-radius: 6px;
-      background: #0d1117;
+    .wl-stock-badge:hover {
+      border-color: #3b82f6;
+      background: rgba(37, 99, 235, 0.15);
     }
-    .hft-table {
-      width: 100%;
-      border-collapse: collapse;
-      text-align: left;
-      font-size: 12.5px;
-    }
-    .hft-table th {
-      background: #161b22;
-      color: #8b949e;
-      padding: 10px 14px;
-      font-weight: 600;
-      border-bottom: 1px solid #30363d;
-      white-space: nowrap;
-    }
-    .hft-table td {
-      padding: 10px 14px;
-      border-bottom: 1px solid #21262d;
-      color: #c9d1d9;
-      vertical-align: middle;
-    }
-    .hft-table tr:hover {
-      background: #161b22;
-    }
-    .sym-col {
-      font-weight: 700;
-      color: #ffffff;
-      font-size: 13.5px;
-    }
-    .deals-col {
-      font-weight: 600;
-      color: #7ee787;
-    }
-    .desk-badge {
-      display: inline-block;
-      background: #1f6feb1e;
-      border: 1px solid #388bfd44;
-      color: #58a6ff;
-      padding: 2px 7px;
-      border-radius: 4px;
-      font-size: 11px;
-      margin: 2px 3px 2px 0;
-      white-space: nowrap;
-    }
-    .btn-wl {
-      padding: 5px 12px;
-      font-size: 12px;
-      border-radius: 4px;
+
+    .wl-remove-btn {
       cursor: pointer;
-      font-weight: 600;
-      border: 1px solid transparent;
-      transition: all 0.15s ease;
-      white-space: nowrap;
+      color: #94a3b8;
+      font-size: 14px;
+      font-weight: bold;
+    }
+    .wl-remove-btn:hover {
+      color: #f43f5e;
+    }
+
+    /* Market Overview Leaderboard */
+    .grid-2col {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      gap: 20px;
+    }
+
+    @media (max-width: 768px) {
+      .grid-2col {
+        grid-template-columns: 1fr;
+      }
+      .brand-title h1 {
+        font-size: 17px;
+      }
+      .card {
+        padding: 14px;
+      }
+      .deals-table th, .deals-table td {
+        padding: 9px 10px;
+        font-size: 12px;
+      }
+      .stat-pill {
+        font-size: 11px;
+        padding: 5px 10px;
+      }
+    }
+
+    /* HFT Desks Tags & Leaderboard Styling */
+    .hft-tag-badge {
       display: inline-flex;
       align-items: center;
       gap: 5px;
+      background: rgba(139, 92, 246, 0.16);
+      border: 1px solid rgba(139, 92, 246, 0.35);
+      color: #c4b5fd;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: 4px;
+      white-space: nowrap;
+      letter-spacing: 0.02em;
     }
-    .btn-wl.add-wl {
-      background: #1f6feb;
+    .hft-tag-badge.clickable {
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .hft-tag-badge.clickable:hover {
+      background: rgba(139, 92, 246, 0.35);
+      border-color: #a78bfa;
       color: #ffffff;
-      border-color: #388bfd;
+      transform: translateY(-1px);
     }
-    .btn-wl.add-wl:hover {
-      background: #388bfd;
+    .non-hft-tag {
+      color: var(--text-muted);
+      font-size: 11.5px;
+      font-style: italic;
     }
-    .btn-wl.in-wl {
-      background: #238636;
-      color: #ffffff;
-      border-color: #2ea043;
+    .rank-badge {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      width: 24px;
+      display: inline-block;
     }
-    .btn-wl.in-wl:hover {
-      background: #da3633;
-      border-color: #f85149;
+    .rank-badge.top3 {
+      color: #fbbf24;
+    }
+    .hft-count-pill {
+      background: rgba(139, 92, 246, 0.18);
+      border: 1px solid rgba(139, 92, 246, 0.45);
+      color: #c4b5fd;
+      font-size: 11.5px;
+      font-weight: 700;
+      padding: 2px 9px;
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
     }
 
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .output-card {
-      background: #161b22;
-      border: 1px solid #30363d;
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    .output-header {
+    /* Pagination Component Styling */
+    .pagination-bar {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 10px 16px;
-      background: #21262d;
-      border-bottom: 1px solid #30363d;
-      font-size: 12px;
-      color: #8b949e;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 12px 18px;
+      background: #0f1523;
+      border: 1px solid var(--border-color);
+      border-top: none;
+      border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+      font-size: 13px;
     }
-    .output-meta {
-      display: flex;
-      gap: 16px;
-    }
-    textarea {
-      width: 100%;
-      height: 520px;
-      background: #0d1117;
-      color: #7ee787;
-      border: none;
-      padding: 16px;
-      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    .pagination-info {
+      color: var(--text-secondary);
       font-size: 12.5px;
-      line-height: 1.55;
-      box-sizing: border-box;
-      resize: vertical;
+      font-weight: 500;
+    }
+    .pagination-info b {
+      color: #ffffff;
+      font-family: var(--font-mono);
+    }
+    .pagination-controls {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .page-size-selector {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+    .page-size-selector select {
+      background: var(--bg-main);
+      color: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 4px 8px;
+      font-size: 12px;
       outline: none;
+      cursor: pointer;
+    }
+    .page-nav-buttons {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .page-nav-btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 5px 11px;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+    .page-nav-btn:hover:not(:disabled) {
+      background: var(--bg-card-hover);
+      border-color: #3b82f6;
+      color: #ffffff;
+    }
+    .page-nav-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      border-color: rgba(255, 255, 255, 0.05);
+    }
+    .page-current-indicator {
+      font-size: 12px;
+      font-weight: 600;
+      color: #60a5fa;
+      padding: 0 6px;
+      font-family: var(--font-mono);
+      white-space: nowrap;
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <div class="title-area">
-        <h1>HFT + V20 Confluence &rarr; Pine Script</h1>
-        <p>V20 Price Action Pulse combined with 12 tracked HFT Desks (Filters out setups without HFT Buying)</p>
+
+  <!-- Top App Navigation Bar -->
+  <header class="app-header">
+    <div class="header-top-row">
+      <div class="brand-title">
+        <h1>
+          <span>⚡</span>
+          <span>NSE Bulk Deal Tracker</span>
+          <span class="accent">&amp; HFT Engine</span>
+        </h1>
+        <div class="brand-meta">
+          <span id="metaDealsCount">-- deals</span>
+          <span class="dot"></span>
+          <span id="metaStocksCount">-- stocks</span>
+          <span class="dot"></span>
+          <span id="metaEntitiesCount">-- entities</span>
+          <span class="dot"></span>
+          <span id="metaDateRange">Loading period...</span>
+        </div>
       </div>
-      <div id="statusBadge" class="badge loading">
-        Loading stocks...
+
+      <div class="header-controls">
+        <!-- Financial Year Dropdown -->
+        <div class="year-selector-wrap" title="Switch Financial Year data file">
+          <span class="year-label">FY:</span>
+          <select id="fySelect" class="year-select" onchange="onYearChange()">
+            <option value="2026-27" selected>2026-27 (Latest)</option>
+            <option value="2025-26">2025-26</option>
+          </select>
+        </div>
+
+        <div id="globalStatusBadge" class="status-badge loading">
+          <span>●</span> Initializing...
+        </div>
       </div>
     </div>
 
-    <div class="card">
-      <label for="stockSelect">Choose Stocks (Search or Multi-Select from all HFT stocks):</label>
-      <select id="stockSelect" multiple style="width: 100%;">
-        <!-- Populated dynamically from API -->
-      </select>
+    <!-- Navigation Tabs -->
+    <nav class="tabs-nav-bar">
+      <button id="tabBtn-hft" class="tab-btn active" onclick="switchTab('hft')">
+        <span>📊</span> Data by HFT Name
+      </button>
+      <button id="tabBtn-stock" class="tab-btn" onclick="switchTab('stock')">
+        <span>📈</span> Data by Stock Name
+      </button>
+      <button id="tabBtn-pinescript" class="tab-btn" onclick="switchTab('pinescript')">
+        <span>⚡</span> Pine Script Generator
+      </button>
+      <button id="tabBtn-watchlist" class="tab-btn" onclick="switchTab('watchlist')">
+        <span>⭐</span> Watchlist Manager
+      </button>
+      <button id="tabBtn-overview" class="tab-btn" onclick="switchTab('overview')">
+        <span>🏆</span> Market Overview &amp; Top Desks
+      </button>
+    </nav>
+  </header>
 
-      <div class="btn-row">
-        <button id="btnGenerate" class="btn-primary" onclick="generateScript()">
-          ⚡ Generate Pine Script
-        </button>
-        <button class="btn-secondary" onclick="loadWatchlistIntoDropdown()">🎯 Load My Watchlist</button>
-        <button class="btn-secondary" onclick="addSelectedToWatchlist()">➕ Add to Watchlist</button>
-        <button class="btn-secondary" onclick="clearAll()">Clear</button>
-        <button id="btnCopy" class="btn-copy" onclick="copyCode()">
-          📋 Copy Code
-        </button>
-      </div>
+  <!-- Main Container -->
+  <main class="main-wrapper">
 
-      <!-- Selected Stocks HFT Deal Intelligence Table -->
-      <div id="selectionTableSection" style="margin-top: 18px; display: none;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <label style="margin: 0; color: #58a6ff;">📊 Selected Stock(s) — HFT Deal Intelligence:</label>
-          <span id="selectedCountBadge" style="font-size: 12px; color: #8b949e;"></span>
-        </div>
-        <div class="hft-table-container">
-          <table class="hft-table">
-            <thead>
-              <tr>
-                <th>Symbol</th>
-                <th>HFT Buy Deals</th>
-                <th>Participating Desks</th>
-                <th>Latest Buy Date</th>
-                <th>First Buy Date</th>
-                <th>Watchlist Action</th>
-              </tr>
-            </thead>
-            <tbody id="selectedTableBody">
-              <!-- Dynamically populated -->
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Interactive Watchlist Section -->
-      <div class="watchlist-section">
-        <div class="watchlist-header">
-          <div class="watchlist-title">
-            <span>⭐ My Azure Blob Watchlist (<span id="watchlistCount">0</span> stocks)</span>
-            <span id="watchlistSyncBadge" class="badge" style="font-size: 11px; padding: 2px 8px; font-weight: normal; color: #58a6ff;">☁️ Syncing with Blob...</span>
+    <!-- ======================================================= -->
+    <!-- TAB 1: DATA BY HFT NAME (MATCHES ATTACHED SCREENSHOT)   -->
+    <!-- ======================================================= -->
+    <section id="tabPane-hft" class="tab-pane active">
+      
+      <!-- HFT Search & Selection Bar -->
+      <div class="search-hero-box">
+        <label style="font-size: 13px; font-weight: 600; color: #94a3b8;">
+          🔍 Select Institutional Desk or Entity Name (Case-Insensitive):
+        </label>
+        <div class="search-input-row">
+          <div class="search-select-wrap">
+            <select id="hftEntitySelect" style="width: 100%;">
+              <option value="">Loading HFT entities...</option>
+            </select>
           </div>
-          <div class="watchlist-actions">
-            <button class="btn-secondary btn-sm" onclick="generateForWatchlist()">⚡ Generate for Watchlist</button>
-            <button class="btn-secondary btn-sm" onclick="downloadWatchlistExcel()">📥 Download watchlist.xlsx</button>
-            <button class="btn-secondary btn-sm" onclick="clearWatchlist()">🗑️ Clear</button>
+          <button class="btn btn-primary" onclick="loadDefaultHft('ALL HFTs (All Institutional Desks Combined)')">
+            ⚡ Quick: ALL HFTs
+          </button>
+          <button class="btn btn-secondary" onclick="loadDefaultHft('QE SECURITIES LLP')">
+            Quick: QE Securities
+          </button>
+          <button class="btn btn-secondary" onclick="loadDefaultHft('GRAVITON RESEARCH CAPITAL LLP')">
+            Quick: Graviton
+          </button>
+          <button class="btn btn-secondary" onclick="loadDefaultHft('HRTI PRIVATE LIMITED')">
+            Quick: HRTI
+          </button>
+        </div>
+      </div>
+
+      <!-- Entity Details Hero Banner (Matches Screenshot) -->
+      <div id="entityHeroBanner" class="entity-hero" style="display: none;">
+        <div class="entity-title-row">
+          <div class="entity-name" id="entityDisplayName">--</div>
+          <button class="btn btn-secondary btn-sm" onclick="exportCurrentHftCsv()">
+            📥 Export Deals CSV
+          </button>
+        </div>
+        <div class="entity-subtitle" id="entitySubtitle">
+          0 bulk deals across 0 stocks
+        </div>
+
+        <div class="pill-stats-row">
+          <div class="stat-pill pill-buysell" id="pillBuySell">
+            0 buys · 0 sells
+          </div>
+          <div class="stat-pill pill-stocks" id="pillStocksTouched">
+            0 stocks touched
+          </div>
+          <div class="stat-pill pill-turnover" id="pillTurnover">
+            Turnover: ₹0.00 Cr
+          </div>
+          <div class="stat-pill" id="pillBuyTurnover" style="color: #34d399;">
+            Buy: ₹0.00 Cr
+          </div>
+          <div class="stat-pill" id="pillSellTurnover" style="color: #fb7185;">
+            Sell: ₹0.00 Cr
           </div>
         </div>
-        <div id="watchlistToast" style="display: none; font-size: 12px; margin-bottom: 8px; padding: 6px 12px; border-radius: 4px; transition: all 0.2s ease;"></div>
-        <div id="watchlistPills" class="watchlist-pills">
-          <!-- Dynamic stock pills -->
+      </div>
+
+      <!-- Filter Controls for Deals Table -->
+      <div id="tableToolbar" class="filter-toolbar" style="display: none;">
+        <div class="side-filter-group">
+          <button id="sideBtn-ALL" class="side-btn active" onclick="setSideFilter('ALL')">All Deals</button>
+          <button id="sideBtn-BUY" class="side-btn" onclick="setSideFilter('BUY')">Buys Only</button>
+          <button id="sideBtn-SELL" class="side-btn" onclick="setSideFilter('SELL')">Sells Only</button>
+        </div>
+
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input 
+            type="text" 
+            id="dealStockSearchInput" 
+            class="stock-search-input" 
+            style="min-width: 220px;"
+            placeholder="Filter by symbol (e.g. IFCI, ANTELOPUS)..." 
+            oninput="renderFilteredDealsTable()"
+          />
+          <span id="dealsCountBadge" style="font-size: 12px; color: var(--text-secondary); white-space: nowrap;">
+            0 deals
+          </span>
         </div>
       </div>
-    </div>
 
-    <div class="output-card">
-      <div class="output-header">
-        <div class="output-meta">
-          <span id="scriptStats">Pine Script v5 Indicator</span>
-        </div>
-        <div id="copyNotice" style="color: #7ee787; display: none;">✓ Copied to clipboard!</div>
+      <!-- Deals Table -->
+      <div class="deals-table-container">
+        <table class="deals-table">
+          <thead>
+            <tr>
+              <th>Date ▼</th>
+              <th>Symbol</th>
+              <th>Company</th>
+              <th style="text-align: center;">Side</th>
+              <th style="text-align: right;">Qty</th>
+              <th style="text-align: right;">Deal Price</th>
+              <th style="text-align: right;">Value</th>
+              <th>Remarks</th>
+            </tr>
+          </thead>
+          <tbody id="hftDealsTableBody">
+            <tr>
+              <td colspan="8" class="table-empty">
+                Select an HFT entity above or click one of the quick shortcuts to view their deals.
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
-      <textarea id="output" readonly placeholder="Select stocks above and click 'Generate Pine Script' to view TradingView Pine Script code..."></textarea>
-    </div>
-  </div>
 
-  <!-- jQuery & Select2 Scripts -->
+      <!-- HFT Deals Table Pagination Bar -->
+      <div class="pagination-bar" id="hftPaginationBar" style="display: none;">
+        <div class="pagination-info" id="hftPaginationInfo">
+          Showing <b>0</b> to <b>0</b> of <b>0</b> deals
+        </div>
+        <div class="pagination-controls">
+          <div class="page-size-selector">
+            <label>Show:</label>
+            <select id="hftPageSizeSelect" onchange="changeHftPageSize(this.value)">
+              <option value="25" selected>25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="250">250</option>
+              <option value="1000">1000</option>
+              <option value="10000">All</option>
+            </select>
+          </div>
+          <div class="page-nav-buttons">
+            <button class="page-nav-btn" id="hftFirstPageBtn" onclick="goToHftPage(1)" title="First Page">«</button>
+            <button class="page-nav-btn" id="hftPrevPageBtn" onclick="goToHftPage(currentHftPage - 1)" title="Previous Page">‹ Prev</button>
+            <span class="page-current-indicator" id="hftPageIndicator">Page 1 of 1</span>
+            <button class="page-nav-btn" id="hftNextPageBtn" onclick="goToHftPage(currentHftPage + 1)" title="Next Page">Next ›</button>
+            <button class="page-nav-btn" id="hftLastPageBtn" onclick="goToHftPage(totalHftPages)" title="Last Page">»</button>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ======================================================= -->
+    <!-- TAB 2: DATA BY STOCK NAME & TOP 10 LEADERBOARDS         -->
+    <!-- ======================================================= -->
+    <section id="tabPane-stock" class="tab-pane">
+      
+      <!-- Top 10 Stocks Dual Leaderboard Grid -->
+      <div class="grid-2col" style="margin-bottom: 24px;">
+        
+        <!-- Leaderboard 1: Top 10 by Multiple HFT Activity -->
+        <div class="card" style="margin-bottom: 0;">
+          <div class="card-header">
+            <div class="card-title">
+              <span>🔥</span> Top 10 Stocks with Multiple HFT Activity
+            </div>
+            <span class="hft-count-pill" id="hftLeaderboardYearBadge">FY 2026-27</span>
+          </div>
+          <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; margin-top: -6px;">
+            Stocks with the highest number of distinct institutional algorithmic trading desks active.
+          </p>
+          <div class="deals-table-container">
+            <table class="deals-table">
+              <thead>
+                <tr>
+                  <th style="width: 32px;">#</th>
+                  <th>Symbol</th>
+                  <th>Company</th>
+                  <th style="text-align: center;">HFT Desks</th>
+                  <th style="text-align: right;">Deals</th>
+                  <th style="text-align: right;">Turnover</th>
+                  <th style="text-align: center;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="topHftActivityTableBody">
+                <tr><td colspan="7" class="table-empty">⏳ Loading Top HFT Stocks...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Leaderboard 2: Top 10 by Highest Turnover -->
+        <div class="card" style="margin-bottom: 0;">
+          <div class="card-header">
+            <div class="card-title">
+              <span>💰</span> Top 10 Stocks by Highest Turnover
+            </div>
+            <span class="hft-count-pill" id="turnoverLeaderboardYearBadge">FY 2026-27</span>
+          </div>
+          <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; margin-top: -6px;">
+            Stocks with maximum aggregate bulk deal value (Buy + Sell).
+          </p>
+          <div class="deals-table-container">
+            <table class="deals-table">
+              <thead>
+                <tr>
+                  <th style="width: 32px;">#</th>
+                  <th>Symbol</th>
+                  <th>Company</th>
+                  <th style="text-align: right;">Turnover</th>
+                  <th style="text-align: right;">Deals</th>
+                  <th style="text-align: center;">HFTs</th>
+                  <th style="text-align: center;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="topTurnoverTableBody">
+                <tr><td colspan="7" class="table-empty">⏳ Loading Top Turnover Stocks...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Stock Search & Quick Tickers -->
+      <div class="search-hero-box">
+        <label style="font-size: 13px; font-weight: 600; color: #94a3b8;">
+          🔍 Select or Search Stock Name / Ticker:
+        </label>
+        <div class="search-input-row">
+          <div class="search-select-wrap">
+            <select id="stockSelectInput" style="width: 100%;">
+              <option value="">Type to search stock or select from list...</option>
+            </select>
+          </div>
+          <button class="btn btn-secondary" onclick="selectAndLoadStock('JINDRILL')">
+            Quick: JINDRILL
+          </button>
+          <button class="btn btn-secondary" onclick="selectAndLoadStock('IRMENERGY')">
+            Quick: IRMENERGY
+          </button>
+          <button class="btn btn-secondary" onclick="selectAndLoadStock('RAMCOSYS')">
+            Quick: RAMCOSYS
+          </button>
+          <button class="btn btn-secondary" onclick="selectAndLoadStock('ADANIGREEN')">
+            Quick: ADANIGREEN
+          </button>
+        </div>
+      </div>
+
+      <!-- Stock Details Hero Banner -->
+      <div id="stockHeroBanner" class="entity-hero" style="display: none;">
+        <div class="entity-title-row">
+          <div>
+            <div class="entity-name" id="stockDisplayName">--</div>
+            <div class="entity-subtitle" id="stockSubtitle">
+              0 bulk deals across 0 HFT desks
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button class="btn btn-secondary btn-sm" id="btnStockAddToWl" onclick="addCurrentStockToWatchlist()">
+              ⭐ Add to Watchlist
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="generatePineScriptForCurrentStock()">
+              ⚡ Generate Pine Script
+            </button>
+            <button class="btn btn-secondary btn-sm" onclick="exportCurrentStockCsv()">
+              📥 Export Deals CSV
+            </button>
+          </div>
+        </div>
+
+        <div class="pill-stats-row" style="margin-bottom: 14px;">
+          <div class="stat-pill pill-buysell" id="pillStockBuySell">
+            0 buys · 0 sells
+          </div>
+          <div class="stat-pill pill-stocks" id="pillStockHftCount">
+            0 HFT Desks
+          </div>
+          <div class="stat-pill pill-turnover" id="pillStockTurnover">
+            Turnover: ₹0.00 Cr
+          </div>
+          <div class="stat-pill" id="pillStockBuyTurnover" style="color: #34d399;">
+            Buy: ₹0.00 Cr
+          </div>
+          <div class="stat-pill" id="pillStockSellTurnover" style="color: #fb7185;">
+            Sell: ₹0.00 Cr
+          </div>
+        </div>
+
+        <!-- Participating HFT Desks Tags -->
+        <div id="stockHftTagsSection" style="margin-top: 10px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08);">
+          <div style="font-size: 12px; font-weight: 600; color: #94a3b8; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+            <span>🤖 Active Institutional Desks in this Stock:</span>
+            <span style="font-size: 11px; color: var(--text-muted);">(Click any desk to view all their deals)</span>
+          </div>
+          <div id="stockHftDesksTags" style="display: flex; flex-wrap: wrap; gap: 6px;">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Filter Controls for Stock Deals Table -->
+      <div id="stockTableToolbar" class="filter-toolbar" style="display: none;">
+        <div class="side-filter-group">
+          <button id="stockSideBtn-ALL" class="side-btn active" onclick="setStockSideFilter('ALL')">All Deals</button>
+          <button id="stockSideBtn-BUY" class="side-btn" onclick="setStockSideFilter('BUY')">Buys Only</button>
+          <button id="stockSideBtn-SELL" class="side-btn" onclick="setStockSideFilter('SELL')">Sells Only</button>
+          <button id="stockSideBtn-HFT" class="side-btn" onclick="setStockSideFilter('HFT')">🤖 HFT Desks Only</button>
+        </div>
+
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input 
+            type="text" 
+            id="stockDealClientSearchInput" 
+            class="stock-search-input" 
+            style="min-width: 220px;"
+            placeholder="Filter by client / desk name..." 
+            oninput="renderFilteredStockDealsTable()"
+          />
+          <span id="stockDealsCountBadge" style="font-size: 12px; color: var(--text-secondary); white-space: nowrap;">
+            0 deals
+          </span>
+        </div>
+      </div>
+
+      <!-- Stock Deals Table -->
+      <div class="deals-table-container">
+        <table class="deals-table">
+          <thead>
+            <tr>
+              <th>Date ▼</th>
+              <th>Client / Institution</th>
+              <th>HFT Desk</th>
+              <th style="text-align: center;">Side</th>
+              <th style="text-align: right;">Qty</th>
+              <th style="text-align: right;">Deal Price</th>
+              <th style="text-align: right;">Value</th>
+              <th>Remarks</th>
+            </tr>
+          </thead>
+          <tbody id="stockDealsTableBody">
+            <tr>
+              <td colspan="8" class="table-empty">
+                Select a stock from the top leaderboards or use the search box above to view all bulk deals.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Stock Deals Table Pagination Bar -->
+      <div class="pagination-bar" id="stockPaginationBar" style="display: none;">
+        <div class="pagination-info" id="stockPaginationInfo">
+          Showing <b>0</b> to <b>0</b> of <b>0</b> deals
+        </div>
+        <div class="pagination-controls">
+          <div class="page-size-selector">
+            <label>Show:</label>
+            <select id="stockPageSizeSelect" onchange="changeStockPageSize(this.value)">
+              <option value="25" selected>25</option>
+              <option value="50">50</option>
+              <option value="100">100</option>
+              <option value="250">250</option>
+              <option value="1000">1000</option>
+              <option value="10000">All</option>
+            </select>
+          </div>
+          <div class="page-nav-buttons">
+            <button class="page-nav-btn" id="stockFirstPageBtn" onclick="goToStockPage(1)" title="First Page">«</button>
+            <button class="page-nav-btn" id="stockPrevPageBtn" onclick="goToStockPage(currentStockPage - 1)" title="Previous Page">‹ Prev</button>
+            <span class="page-current-indicator" id="stockPageIndicator">Page 1 of 1</span>
+            <button class="page-nav-btn" id="stockNextPageBtn" onclick="goToStockPage(currentStockPage + 1)" title="Next Page">Next ›</button>
+            <button class="page-nav-btn" id="stockLastPageBtn" onclick="goToStockPage(totalStockPages)" title="Last Page">»</button>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ======================================================= -->
+    <!-- TAB 3: PINE SCRIPT GENERATOR (DARK THEME & RESPONSIVE) -->
+    <!-- ======================================================= -->
+    <section id="tabPane-pinescript" class="tab-pane">
+      
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>⚡</span> HFT Indicator Generator
+          </div>
+          <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+            <div class="year-selector-wrap" title="Financial Year for Pine Script Data">
+              <span class="year-label">FY:</span>
+              <select id="genFySelect" class="year-select" onchange="onGenYearChange(this.value)">
+                <option value="2026-27" selected>2026-27 (Latest)</option>
+                <option value="2025-26">2025-26</option>
+              </select>
+            </div>
+            <span id="genStocksBadge" style="font-size: 12.5px; color: #60a5fa; font-weight: 600;">
+              0 stocks loaded
+            </span>
+          </div>
+        </div>
+
+        <!-- Stock Selection Box -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px; margin-bottom: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 8px;">
+            <label style="font-size: 13px; font-weight: 600; color: #cbd5e1;">
+              🔍 Choose Tracked Stocks (Type any ticker to search or paste comma-separated):
+            </label>
+            <div style="display: flex; gap: 6px;">
+              <button class="btn btn-secondary btn-sm" onclick="loadWatchlistIntoGenerator()">
+                ⭐ Load Watchlist (<span id="genWlCount">0</span>)
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="selectAllGeneratorStocks()">
+                Select All
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="clearGeneratorSelection()">
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <select id="genStockSelect" multiple style="width: 100%;">
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+
+        <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 14px;">
+          <button id="btnGeneratePine" class="btn btn-primary" onclick="generatePineScript()">
+            ⚡ Generate Pine Script v5
+          </button>
+          <button class="btn btn-secondary" onclick="copyPineScript()">
+            📋 Copy Code
+          </button>
+          <button class="btn btn-secondary" onclick="downloadPineScript()">
+            💾 Download .pine File
+          </button>
+          <span id="pineCopyNotice" style="font-size: 12px; color: var(--success); display: none;">
+            ✓ Copied to clipboard!
+          </span>
+        </div>
+      </div>
+
+      <!-- Pine Script Output Card -->
+      <div class="code-output-card">
+        <div class="code-output-header">
+          <span id="pineScriptMeta" style="font-size: 12.5px; color: var(--text-secondary); font-family: var(--font-mono);">
+            Pine Script v5 Indicator
+          </span>
+          <span id="pineCharCount" style="font-size: 12px; color: var(--text-muted); font-family: var(--font-mono);">
+            0 chars
+          </span>
+        </div>
+        <textarea id="pineOutputArea" class="code-textarea" readonly placeholder="Select stocks above and click 'Generate Pine Script v5' to compile indicator code..."></textarea>
+      </div>
+
+    </section>
+
+    <!-- ======================================================= -->
+    <!-- TAB 3: WATCHLIST MANAGER (AZURE BLOB SYNCHRONIZED)      -->
+    <!-- ======================================================= -->
+    <section id="tabPane-watchlist" class="tab-pane">
+      
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">
+            <span>⭐</span> Azure Blob Watchlist Manager
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <span id="wlSyncBadge" class="status-badge">
+              ☁️ Cloud Synced
+            </span>
+            <button class="btn btn-secondary btn-sm" onclick="downloadWatchlistExcel()">
+              📥 Download watchlist.xlsx
+            </button>
+          </div>
+        </div>
+
+        <!-- Searchable Stock Selector to Add to Watchlist -->
+        <div style="background: var(--bg-main); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 16px; margin-bottom: 16px;">
+          <label style="font-size: 13px; font-weight: 600; color: #cbd5e1; display: block; margin-bottom: 8px;">
+            🔍 Search &amp; Add Stock to Watchlist:
+          </label>
+          <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 280px;">
+              <select id="wlStockAddSelect" style="width: 100%;">
+                <option value="">Type ticker to search (e.g. ASHOKA, WAAREERTL, IFCI, RELIANCE)...</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" onclick="addSelectedDropdownStockToWatchlist()">
+              ➕ Add to Watchlist
+            </button>
+          </div>
+        </div>
+
+        <!-- Manual Batch Add Accordion / Row -->
+        <details style="margin-bottom: 16px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px;">
+          <summary style="cursor: pointer; font-size: 12.5px; font-weight: 600; color: #60a5fa; outline: none;">
+            ✍️ Or paste multiple tickers comma-separated
+          </summary>
+          <div style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
+            <input 
+              type="text" 
+              id="newWatchlistInput" 
+              class="stock-search-input" 
+              style="flex: 1; min-width: 260px;" 
+              placeholder="Paste comma or space-separated tickers (e.g. TATASTEEL, INFY, SBIN)..." 
+            />
+            <button class="btn btn-secondary" onclick="addCustomWatchlistSymbols()">
+              ➕ Batch Add
+            </button>
+          </div>
+        </details>
+
+        <div id="wlToastMsg" style="display: none; font-size: 12.5px; padding: 8px 12px; border-radius: 6px; margin-bottom: 14px;"></div>
+
+        <!-- Filter Saved Watchlist Stocks & Counter -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; flex-wrap: wrap; gap: 10px;">
+          <div style="font-size: 13.5px; font-weight: 700; color: #f1f5f9;">
+            ⭐ Saved Watchlist Stocks (<span id="tabWlCount">0</span>):
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <input 
+              type="text" 
+              id="filterSavedWlInput" 
+              class="stock-search-input" 
+              style="width: 220px; padding: 6px 12px; font-size: 12.5px;" 
+              placeholder="Filter saved stocks..." 
+              oninput="filterSavedWatchlistPills(this.value)" 
+            />
+            <button class="btn btn-secondary btn-sm" onclick="clearWatchlistAll()">
+              🗑️ Clear All
+            </button>
+          </div>
+        </div>
+
+        <!-- Watchlist Stock Badges List -->
+        <div id="watchlistPillsList" class="wl-pills-container">
+          <!-- Dynamic stock badges -->
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ======================================================= -->
+    <!-- TAB 4: MARKET OVERVIEW & TOP DESKS LEADERBOARD          -->
+    <!-- ======================================================= -->
+    <section id="tabPane-overview" class="tab-pane">
+      
+      <!-- Period Selector Toggle (Full Year vs Latest Trading Date) -->
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 14px 20px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 13.5px; font-weight: 700; color: #ffffff;">Trading Period:</span>
+          <span id="overviewPeriodLabel" style="font-size: 13px; color: #60a5fa; font-weight: 600;">Full Financial Year</span>
+        </div>
+        <div class="side-filter-group">
+          <button id="periodBtn-full" class="side-btn active" onclick="switchOverviewPeriod('full')">
+            📆 Full Financial Year (Cumulative)
+          </button>
+          <button id="periodBtn-latest" class="side-btn" onclick="switchOverviewPeriod('latest')">
+            ⚡ Latest Date Only (<span id="overviewLatestDateBadge">--</span>)
+          </button>
+        </div>
+      </div>
+
+      <div class="grid-2col">
+        <!-- Top Institutional Desks -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <span>🏆</span> Top Institutional Desks by Volume
+            </div>
+            <span id="topDesksPeriodSubtitle" style="font-size: 12px; color: var(--text-muted);">Ranked by Deal Count</span>
+          </div>
+
+          <div class="deals-table-container">
+            <table class="deals-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Desk / Entity</th>
+                  <th style="text-align: right;">Deals</th>
+                  <th style="text-align: right;">Stocks</th>
+                  <th style="text-align: right;">Turnover</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="topDesksTableBody">
+                <!-- Dynamic Rows -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Most Active Stocks -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">
+              <span>📈</span> Most Active Stocks Traded by HFTs
+            </div>
+            <span id="topStocksPeriodSubtitle" style="font-size: 12px; color: var(--text-muted);">Institutional Activity</span>
+          </div>
+
+          <div class="deals-table-container">
+            <table class="deals-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Symbol</th>
+                  <th>Company</th>
+                  <th style="text-align: right;">HFT Deals</th>
+                  <th style="text-align: right;">Turnover</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="topStocksTableBody">
+                <!-- Dynamic Rows -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- jQuery & Select2 JS -->
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
   <script>
-    let allSymbols = [];
-    let stockSummaries = {};
+    // Global Application State
+    let currentFY = "2026-27";
+    let allHftEntities = [];
+    let currentSelectedEntity = null;
+    let currentEntityDeals = [];
+    let currentSideFilter = "ALL";
     let myWatchlist = [];
+    let allMarketSymbols = [];
+    let hftSymbolsList = [];
+    let stockSummariesMap = {};
+    let marketSummaryData = null;
+    let currentOverviewPeriod = "full";
+    let topHftStocksData = null;
+    let currentSelectedStock = null;
+    let currentStockDeals = [];
+    let currentStockSideFilter = "ALL";
+
+    // Pagination State
+    let currentHftPage = 1;
+    let hftPageSize = 25;
+    let currentStockPage = 1;
+    let stockPageSize = 25;
 
     $(document).ready(async function() {
-      const $select = $('#stockSelect');
+      initSelect2Dropdowns();
+      await loadWatchlist();
+      await switchFinancialYear(currentFY);
+    });
 
-      $select.select2({
-        placeholder: "Search and select stocks (e.g. 5PAISA, ANGELONE, RICOAUTO)...",
+    function initSelect2Dropdowns() {
+      // 1. HFT Entity Single Select
+      $('#hftEntitySelect').select2({
+        placeholder: "Search any institutional desk (e.g. ALL HFTs, QE Securities, Graviton)...",
         allowClear: true,
-        closeOnSelect: true
+        dropdownAutoWidth: true,
+        width: '100%'
+      }).on('change', function() {
+        const val = $(this).val();
+        if (val && val !== currentSelectedEntity) {
+          fetchAndDisplayEntityDeals(val);
+        }
       });
 
-      // Ensure typed search keyword is completely cleared when a stock is selected or removed
-      $select.on('select2:select select2:unselect', function() {
+      // 2. Pine Script Stock Multi-Select with TAGS support (allows typing ANY ticker)
+      $('#genStockSelect').select2({
+        placeholder: "Type stock name to search or select (e.g. ASHOKA, WAAREERTL, IFCI)...",
+        allowClear: true,
+        closeOnSelect: false,
+        tags: true,
+        tokenSeparators: [',', ' '],
+        width: '100%'
+      });
+
+      // Clear search keyword after stock is selected or unselected
+      $('#genStockSelect').on('select2:select select2:unselect', function() {
         setTimeout(function() {
-          $('.select2-search__field').val('').trigger('input');
+          $('#genStockSelect').next('.select2-container').find('.select2-search__field').val('').trigger('input');
         }, 10);
       });
 
-      $select.on('change', function() {
-        renderSelectedTable();
+      // 3. Watchlist Add Stock Dropdown (Searchable across all market stocks)
+      $('#wlStockAddSelect').select2({
+        placeholder: "Type stock name to search (e.g. ASHOKA, WAAREERTL, IFCI, RELIANCE)...",
+        allowClear: true,
+        tags: true,
+        width: '100%'
       });
 
-      await loadWatchlist();
-      await initSymbols();
-    });
-
-    function showWatchlistToast(msg, type = "success") {
-      const toast = document.getElementById("watchlistToast");
-      if (!toast) return;
-      toast.innerText = msg;
-      toast.style.display = "block";
-      if (type === "success") {
-        toast.style.background = "#1f6feb2a";
-        toast.style.border = "1px solid #388bfd";
-        toast.style.color = "#79c0ff";
-      } else if (type === "info") {
-        toast.style.background = "#161b22";
-        toast.style.border = "1px solid #30363d";
-        toast.style.color = "#8b949e";
-      } else {
-        toast.style.background = "#da36332a";
-        toast.style.border = "1px solid #f85149";
-        toast.style.color = "#ff7b72";
-      }
-      setTimeout(() => {
-        toast.style.display = "none";
-      }, 3500);
+      // 4. Stock Deals Explorer Single Select (Searchable across all market stocks)
+      $('#stockSelectInput').select2({
+        placeholder: "Type stock name to search (e.g. JINDRILL, IRMENERGY, RAMCOSYS)...",
+        allowClear: true,
+        width: '100%'
+      }).on('change', function() {
+        const val = $(this).val();
+        if (val && val !== currentSelectedStock) {
+          fetchAndDisplayStockDeals(val);
+        }
+      });
     }
 
-    async function loadWatchlist() {
-      const syncBadge = document.getElementById("watchlistSyncBadge");
-      if (syncBadge) {
-        syncBadge.innerText = "☁️ Syncing with Blob...";
-        syncBadge.style.color = "#e3b341";
+    // Tab Switching Logic
+    function switchTab(tabKey) {
+      $('.tab-btn').removeClass('active');
+      $('.tab-pane').removeClass('active');
+
+      $(`#tabBtn-${tabKey}`).addClass('active');
+      $(`#tabPane-${tabKey}`).addClass('active');
+
+      if (tabKey === 'overview' && !marketSummaryData) {
+        loadMarketSummary();
+      }
+      if (tabKey === 'stock' && !topHftStocksData) {
+        loadTopHftStocks();
+      }
+    }
+
+    // Financial Year Change Handler
+    async function onYearChange() {
+      const selectedYear = $('#fySelect').val();
+      await switchFinancialYear(selectedYear);
+    }
+
+    async function onGenYearChange(year) {
+      $('#fySelect').val(year);
+      await switchFinancialYear(year);
+    }
+
+    async function switchFinancialYear(year) {
+      currentFY = year;
+      $('#fySelect').val(year);
+      $('#genFySelect').val(year);
+      setGlobalStatus("Loading " + year + " data...", true);
+
+      try {
+        // Load Market Summary & Metadata
+        await loadMarketSummary();
+
+        // Load Top HFT Activity and Turnover Stocks
+        await loadTopHftStocks();
+
+        // Load HFT Entities for dropdown
+        await loadHftEntities();
+
+        // Load Pine Script Stock List & Watchlist Search List
+        await loadMarketStocks();
+
+        setGlobalStatus(`✓ FY ${currentFY} Active`, false);
+
+        // If an entity was already selected, reload deals in the new FY
+        if (currentSelectedEntity) {
+          fetchAndDisplayEntityDeals(currentSelectedEntity);
+        } else {
+          // Default to ALL HFTs (All Institutional Desks Combined) as requested!
+          loadDefaultHft("ALL HFTs (All Institutional Desks Combined)");
+        }
+
+        // If a stock was already selected, reload deals in the new FY
+        if (currentSelectedStock) {
+          fetchAndDisplayStockDeals(currentSelectedStock);
+        }
+
+        // If Pine Script was already generated, automatically re-compile for the newly selected FY!
+        if ($('#pineOutputArea').val() && ($('#genStockSelect').val() || []).length > 0) {
+          generatePineScript();
+        }
+
+      } catch (err) {
+        console.error("Error switching financial year:", err);
+        setGlobalStatus("Error loading FY data", true);
+      }
+    }
+
+    function setGlobalStatus(text, isLoading) {
+      const badge = $('#globalStatusBadge');
+      badge.html(`<span>●</span> ${text}`);
+      if (isLoading) {
+        badge.addClass('loading');
+      } else {
+        badge.removeClass('loading');
+      }
+    }
+
+    // Load Overview & Metadata for Header
+    async function loadMarketSummary(period = currentOverviewPeriod) {
+      currentOverviewPeriod = period;
+      try {
+        const res = await fetch(`/api/generate?action=market_summary&year=${currentFY}&period=${period}`);
+        if (res.ok) {
+          const data = await res.json();
+          marketSummaryData = data;
+
+          if (data.latest_date) {
+            $('#overviewLatestDateBadge').text(data.latest_date);
+          }
+
+          if (period === 'latest') {
+            $('#overviewPeriodLabel').text(`⚡ Latest Trading Day (${data.latest_date || 'Latest'})`);
+            $('#topDesksPeriodSubtitle').text(`Ranked by Deals on ${data.latest_date || 'Latest Day'}`);
+            $('#topStocksPeriodSubtitle').text(`Most Active on ${data.latest_date || 'Latest Day'}`);
+          } else {
+            $('#overviewPeriodLabel').text(`📆 Full Financial Year (${data.date_range || currentFY})`);
+            $('#topDesksPeriodSubtitle').text(`Ranked by Cumulative Deal Count (${data.date_range || currentFY})`);
+            $('#topStocksPeriodSubtitle').text(`Cumulative Institutional Activity (${data.date_range || currentFY})`);
+            
+            $('#metaDealsCount').text(`${Number(data.total_deals).toLocaleString()} deals`);
+            $('#metaStocksCount').text(`${Number(data.total_stocks).toLocaleString()} stocks`);
+            $('#metaEntitiesCount').text(`${Number(data.total_entities).toLocaleString()} entities`);
+            $('#metaDateRange').text(data.date_range || currentFY);
+          }
+
+          renderOverviewLeaderboards(data);
+        }
+      } catch (e) {
+        console.warn("Could not load market summary:", e);
+      }
+    }
+
+    async function switchOverviewPeriod(period) {
+      currentOverviewPeriod = period;
+      $('#periodBtn-full, #periodBtn-latest').removeClass('active');
+      $(`#periodBtn-${period}`).addClass('active');
+      await loadMarketSummary(period);
+    }
+
+    function renderOverviewLeaderboards(data) {
+      // Top Desks Table
+      const deskTbody = $('#topDesksTableBody');
+      deskTbody.empty();
+      if (data.top_entities && data.top_entities.length > 0) {
+        data.top_entities.forEach((ent, idx) => {
+          deskTbody.append(`
+            <tr>
+              <td style="color: var(--text-muted); font-weight: 600;">#${idx + 1}</td>
+              <td style="font-weight: 700; color: #ffffff;">${ent.name}</td>
+              <td style="text-align: right; font-family: var(--font-mono); color: #60a5fa; font-weight: 600;">${ent.deals.toLocaleString()}</td>
+              <td style="text-align: right; font-family: var(--font-mono);">${ent.stocks}</td>
+              <td style="text-align: right; font-family: var(--font-mono); font-weight: 600;">₹${ent.turnover_cr.toLocaleString()} Cr</td>
+              <td>
+                <button class="btn btn-secondary btn-sm" onclick="jumpToHftDeals('${escapeQuotes(ent.name)}')">
+                  View Deals →
+                </button>
+              </td>
+            </tr>
+          `);
+        });
+      } else {
+        deskTbody.html('<tr><td colspan="6" class="table-empty">No institutional desk deals found for this period.</td></tr>');
       }
 
+      // Top Stocks Table
+      const stockTbody = $('#topStocksTableBody');
+      stockTbody.empty();
+      if (data.top_stocks && data.top_stocks.length > 0) {
+        data.top_stocks.forEach((stk, idx) => {
+          stockTbody.append(`
+            <tr>
+              <td style="color: var(--text-muted); font-weight: 600;">#${idx + 1}</td>
+              <td style="font-weight: 700; color: #60a5fa; font-family: var(--font-mono);">
+                <a href="javascript:void(0)" onclick="selectAndLoadStock('${stk.symbol}')" style="color: #60a5fa; text-decoration: none;" title="View deals for ${stk.symbol}">
+                  ${stk.symbol}
+                </a>
+              </td>
+              <td style="color: #e2e8f0; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${stk.company}</td>
+              <td style="text-align: right; font-family: var(--font-mono); color: #34d399; font-weight: 600;">${stk.deals.toLocaleString()}</td>
+              <td style="text-align: right; font-family: var(--font-mono); font-weight: 600;">₹${stk.turnover_cr.toLocaleString()} Cr</td>
+              <td>
+                <button class="btn btn-secondary btn-sm" onclick="selectAndLoadStock('${stk.symbol}')">
+                  View Deals →
+                </button>
+              </td>
+            </tr>
+          `);
+        });
+      } else {
+        stockTbody.html('<tr><td colspan="6" class="table-empty">No stock deals recorded for this period.</td></tr>');
+      }
+    }
+
+    function jumpToHftDeals(hftName) {
+      switchTab('hft');
+      loadDefaultHft(hftName);
+    }
+
+    // ================================================================
+    // TOP 10 STOCKS LEADERBOARDS & STOCK DEALS EXPLORER
+    // ================================================================
+    async function loadTopHftStocks() {
+      try {
+        $('#hftLeaderboardYearBadge').text(`FY ${currentFY}`);
+        $('#turnoverLeaderboardYearBadge').text(`FY ${currentFY}`);
+
+        const res = await fetch(`/api/generate?action=top_hft_stocks&year=${currentFY}`);
+        if (!res.ok) throw new Error("Failed to fetch top stocks");
+        const data = await res.json();
+        topHftStocksData = data;
+
+        // 1. Render Top 10 by Multiple HFT Activity
+        const hftTbody = $('#topHftActivityTableBody');
+        hftTbody.empty();
+        if (data.top_by_hft_activity && data.top_by_hft_activity.length > 0) {
+          data.top_by_hft_activity.forEach((stk, idx) => {
+            const rankClass = idx < 3 ? 'rank-badge top3' : 'rank-badge';
+            const desksPreview = stk.hft_names ? stk.hft_names.slice(0, 3).join(', ') : '';
+            hftTbody.append(`
+              <tr>
+                <td><span class="${rankClass}">#${idx + 1}</span></td>
+                <td>
+                  <a href="javascript:void(0)" onclick="selectAndLoadStock('${stk.symbol}')" class="td-symbol" title="View deals for ${stk.symbol}">
+                    ${stk.symbol}
+                  </a>
+                </td>
+                <td>
+                  <div class="td-company" title="${stk.company}">${stk.company}</div>
+                  <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">
+                    ${desksPreview}${stk.hft_names && stk.hft_names.length > 3 ? '...' : ''}
+                  </div>
+                </td>
+                <td style="text-align: center;">
+                  <span class="hft-count-pill" title="${(stk.hft_names || []).join(', ')}">
+                    🤖 ${stk.distinct_hfts} Desks
+                  </span>
+                </td>
+                <td style="text-align: right; font-family: var(--font-mono); font-size: 12px; color: #cbd5e1;">
+                  ${stk.total_deals}
+                  <div style="font-size: 10.5px; color: var(--text-muted);">${stk.buys}B / ${stk.sells}S</div>
+                </td>
+                <td style="text-align: right; font-family: var(--font-mono); font-weight: 700; color: #f8fafc; font-size: 12.5px;">
+                  ₹${stk.turnover_cr.toLocaleString()} Cr
+                </td>
+                <td style="text-align: center;">
+                  <button class="btn btn-secondary btn-sm" onclick="selectAndLoadStock('${stk.symbol}')">
+                    View Deals →
+                  </button>
+                </td>
+              </tr>
+            `);
+          });
+        } else {
+          hftTbody.html('<tr><td colspan="7" class="table-empty">No HFT activity data found for this period.</td></tr>');
+        }
+
+        // 2. Render Top 10 by Highest Turnover
+        const turnoverTbody = $('#topTurnoverTableBody');
+        turnoverTbody.empty();
+        if (data.top_by_turnover && data.top_by_turnover.length > 0) {
+          data.top_by_turnover.forEach((stk, idx) => {
+            const rankClass = idx < 3 ? 'rank-badge top3' : 'rank-badge';
+            turnoverTbody.append(`
+              <tr>
+                <td><span class="${rankClass}">#${idx + 1}</span></td>
+                <td>
+                  <a href="javascript:void(0)" onclick="selectAndLoadStock('${stk.symbol}')" class="td-symbol" title="View deals for ${stk.symbol}">
+                    ${stk.symbol}
+                  </a>
+                </td>
+                <td>
+                  <div class="td-company" title="${stk.company}">${stk.company}</div>
+                </td>
+                <td style="text-align: right; font-family: var(--font-mono); font-weight: 700; color: #34d399; font-size: 12.5px;">
+                  ₹${stk.turnover_cr.toLocaleString()} Cr
+                </td>
+                <td style="text-align: right; font-family: var(--font-mono); font-size: 12px; color: #cbd5e1;">
+                  ${stk.total_deals}
+                  <div style="font-size: 10.5px; color: var(--text-muted);">${stk.buys}B / ${stk.sells}S</div>
+                </td>
+                <td style="text-align: center;">
+                  <span class="hft-count-pill" style="${stk.distinct_hfts > 0 ? '' : 'opacity: 0.5;'}">
+                    ${stk.distinct_hfts > 0 ? '🤖 ' + stk.distinct_hfts + ' Desks' : '0 Desks'}
+                  </span>
+                </td>
+                <td style="text-align: center;">
+                  <button class="btn btn-secondary btn-sm" onclick="selectAndLoadStock('${stk.symbol}')">
+                    View Deals →
+                  </button>
+                </td>
+              </tr>
+            `);
+          });
+        } else {
+          turnoverTbody.html('<tr><td colspan="7" class="table-empty">No turnover data found for this period.</td></tr>');
+        }
+
+      } catch (err) {
+        console.error("Error loading top HFT stocks:", err);
+      }
+    }
+
+    function selectAndLoadStock(symbol) {
+      if (!symbol) return;
+      switchTab('stock');
+      $('#stockSelectInput').val(symbol).trigger('change');
+      fetchAndDisplayStockDeals(symbol);
+      const banner = document.getElementById('stockHeroBanner');
+      if (banner) {
+        banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+
+    async function fetchAndDisplayStockDeals(symbol) {
+      if (!symbol) return;
+      currentSelectedStock = symbol;
+      const tbody = $('#stockDealsTableBody');
+      tbody.html('<tr><td colspan="8" class="table-empty">⏳ Loading deals for ' + symbol + ' from Azure Blob...</td></tr>');
+
+      try {
+        const res = await fetch(`/api/generate?action=stock_deals&symbol=${encodeURIComponent(symbol)}&year=${currentFY}`);
+        if (!res.ok) throw new Error("Failed to load stock deals");
+        const data = await res.json();
+
+        currentStockDeals = data.deals || [];
+
+        // Render Hero Banner
+        $('#stockDisplayName').text(`${data.company} (${data.symbol})`);
+        $('#stockSubtitle').text(`${data.total_deals.toLocaleString()} bulk deals across ${data.hft_desks_count} active HFT desk(s)`);
+        $('#pillStockBuySell').text(`${data.buys_count.toLocaleString()} buys · ${data.sells_count.toLocaleString()} sells`);
+        $('#pillStockHftCount').text(`${data.hft_desks_count} HFT Desks Active`);
+        $('#pillStockTurnover').text(`Turnover: ₹${data.total_turnover_cr.toLocaleString()} Cr`);
+        $('#pillStockBuyTurnover').text(`Buy: ₹${data.buy_turnover_cr.toLocaleString()} Cr`);
+        $('#pillStockSellTurnover').text(`Sell: ₹${data.sell_turnover_cr.toLocaleString()} Cr`);
+
+        // Render Participating HFT Desks Tags
+        const tagsContainer = $('#stockHftDesksTags');
+        tagsContainer.empty();
+        if (data.hft_desks && data.hft_desks.length > 0) {
+          $('#stockHftTagsSection').show();
+          data.hft_desks.forEach(desk => {
+            tagsContainer.append(`
+              <span class="hft-tag-badge clickable" onclick="jumpToHftDeals('${escapeQuotes(desk)}')" title="Click to view all deals by ${desk}">
+                ⚡ ${desk} ↗
+              </span>
+            `);
+          });
+        } else {
+          tagsContainer.html('<span class="non-hft-tag">No institutional HFT desk bulk deals recorded for this stock in FY ' + currentFY + '.</span>');
+        }
+
+        $('#stockHeroBanner').slideDown(150);
+        $('#stockTableToolbar').slideDown(150);
+
+        renderFilteredStockDealsTable();
+
+      } catch (err) {
+        tbody.html(`<tr><td colspan="8" class="table-empty" style="color: #f43f5e;">Error loading stock deals: ${err.message}</td></tr>`);
+      }
+    }
+
+    function setStockSideFilter(side) {
+      currentStockSideFilter = side;
+      currentStockPage = 1;
+      $('#stockSideBtn-ALL, #stockSideBtn-BUY, #stockSideBtn-SELL, #stockSideBtn-HFT').removeClass('active buy-active sell-active');
+      $(`#stockSideBtn-${side}`).addClass('active');
+      if (side === 'BUY') $(`#stockSideBtn-${side}`).addClass('buy-active');
+      if (side === 'SELL') $(`#stockSideBtn-${side}`).addClass('sell-active');
+      renderFilteredStockDealsTable();
+    }
+
+    function renderFilteredStockDealsTable() {
+      const tbody = $('#stockDealsTableBody');
+      const searchTxt = ($('#stockDealClientSearchInput').val() || '').trim().toUpperCase();
+
+      let filtered = currentStockDeals;
+
+      if (currentStockSideFilter === 'BUY') {
+        filtered = filtered.filter(d => d.side.toUpperCase() === 'BUY');
+      } else if (currentStockSideFilter === 'SELL') {
+        filtered = filtered.filter(d => d.side.toUpperCase() === 'SELL');
+      } else if (currentStockSideFilter === 'HFT') {
+        filtered = filtered.filter(d => d.is_hft);
+      }
+
+      if (searchTxt) {
+        filtered = filtered.filter(d => 
+          (d.client_name && d.client_name.toUpperCase().includes(searchTxt)) ||
+          (d.matched_hft && d.matched_hft.toUpperCase().includes(searchTxt))
+        );
+      }
+
+      $('#stockDealsCountBadge').text(`${filtered.length.toLocaleString()} deals shown`);
+
+      if (filtered.length === 0) {
+        tbody.html('<tr><td colspan="8" class="table-empty">No deals match the selected filters.</td></tr>');
+        $('#stockPaginationBar').hide();
+        return;
+      }
+
+      const totalItems = filtered.length;
+      const totalPages = Math.ceil(totalItems / stockPageSize) || 1;
+      if (currentStockPage > totalPages) currentStockPage = totalPages;
+      if (currentStockPage < 1) currentStockPage = 1;
+
+      const startIdx = (currentStockPage - 1) * stockPageSize;
+      const endIdx = Math.min(startIdx + stockPageSize, totalItems);
+      const paginatedDeals = filtered.slice(startIdx, endIdx);
+
+      $('#stockPaginationInfo').html(`Showing <b>${(startIdx + 1).toLocaleString()}</b> to <b>${endIdx.toLocaleString()}</b> of <b>${totalItems.toLocaleString()}</b> deals`);
+      $('#stockPageIndicator').text(`Page ${currentStockPage} of ${totalPages}`);
+
+      $('#stockFirstPageBtn').prop('disabled', currentStockPage <= 1);
+      $('#stockPrevPageBtn').prop('disabled', currentStockPage <= 1);
+      $('#stockNextPageBtn').prop('disabled', currentStockPage >= totalPages);
+      $('#stockLastPageBtn').prop('disabled', currentStockPage >= totalPages);
+      $('#stockPaginationBar').show();
+
+      const rowsHtml = paginatedDeals.map(deal => {
+        const sideClass = deal.side.toUpperCase() === 'BUY' ? 'buy' : 'sell';
+        const hftBadge = deal.is_hft 
+          ? `<span class="hft-tag-badge clickable" onclick="jumpToHftDeals('${escapeQuotes(deal.matched_hft)}')" title="View ${deal.matched_hft} deals">🤖 ${deal.matched_hft} ↗</span>`
+          : `<span class="non-hft-tag">Other Entity</span>`;
+
+        return `
+          <tr>
+            <td class="td-date">${deal.date}</td>
+            <td style="font-weight: 600; color: #ffffff;">${deal.client_name}</td>
+            <td>${hftBadge}</td>
+            <td style="text-align: center;"><span class="side-badge ${sideClass}">${deal.side}</span></td>
+            <td class="td-qty">${deal.quantity_formatted}</td>
+            <td class="td-price">₹${deal.price_formatted}</td>
+            <td class="td-val">${deal.value_formatted}</td>
+            <td class="td-remarks" title="${deal.remarks}">${deal.remarks}</td>
+          </tr>
+        `;
+      }).join('');
+
+      tbody.html(rowsHtml);
+    }
+
+    function changeStockPageSize(size) {
+      stockPageSize = parseInt(size, 10);
+      currentStockPage = 1;
+      renderFilteredStockDealsTable();
+    }
+
+    function goToStockPage(page) {
+      currentStockPage = page;
+      renderFilteredStockDealsTable();
+      const toolbar = document.getElementById('stockTableToolbar');
+      if (toolbar) toolbar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    async function addCurrentStockToWatchlist() {
+      if (!currentSelectedStock) return;
+      const sym = currentSelectedStock.toUpperCase();
+      if (myWatchlist.includes(sym)) {
+        showWatchlistToast(`${sym} is already in your watchlist.`, "info");
+        return;
+      }
+
+      showWatchlistToast(`Saving ${sym} to Azure Blob watchlist...`, "info");
+      try {
+        const res = await fetch(`/api/generate?action=watchlist_add&symbol=${encodeURIComponent(sym)}`);
+        if (res.ok) {
+          const data = await res.json();
+          myWatchlist = data.watchlist || [];
+          renderWatchlistUI();
+          showWatchlistToast(`✓ Saved ${sym} permanently to Azure Blob!`, "success");
+          return;
+        }
+      } catch (err) {}
+
+      myWatchlist.push(sym);
+      localStorage.setItem("hft_user_watchlist", JSON.stringify(myWatchlist));
+      renderWatchlistUI();
+      showWatchlistToast("Saved locally (Server offline)", "info");
+    }
+
+    function generatePineScriptForCurrentStock() {
+      if (!currentSelectedStock) return;
+      switchTab('pinescript');
+      $('#genStockSelect').val([currentSelectedStock]).trigger('change');
+      generatePineScript();
+    }
+
+    function exportCurrentStockCsv() {
+      if (!currentStockDeals || currentStockDeals.length === 0) {
+        alert("No deals available to export.");
+        return;
+      }
+
+      let csv = "Date,Symbol,Client,HFT_Desk,Side,Quantity,Price,Value,Remarks\n";
+      currentStockDeals.forEach(d => {
+        const row = [
+          `"${d.date}"`,
+          `"${currentSelectedStock}"`,
+          `"${(d.client_name || '').replace(/"/g, '""')}"`,
+          `"${(d.matched_hft || '').replace(/"/g, '""')}"`,
+          `"${d.side}"`,
+          d.quantity,
+          d.price,
+          `"${d.value_formatted}"`,
+          `"${(d.remarks || '').replace(/"/g, '""')}"`
+        ];
+        csv += row.join(",") + "\n";
+      });
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${currentSelectedStock}_Deals_${currentFY}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // Load HFT Entities into Dropdown
+    async function loadHftEntities() {
+      const select = $('#hftEntitySelect');
+      select.empty().append('<option value="">Searching entities...</option>');
+
+      const res = await fetch(`/api/generate?action=hft_entities&year=${currentFY}`);
+      if (!res.ok) throw new Error("Failed to load entities");
+      const json = await res.json();
+      allHftEntities = json.entities || [];
+
+      select.empty().append('<option value="">Choose an institutional desk or entity...</option>');
+
+      allHftEntities.forEach(ent => {
+        const isAll = ent.is_all || ent.name.startsWith("ALL HFT");
+        const prefix = isAll ? "⚡ " : "";
+        const title = `${prefix}${ent.name} (${ent.deals.toLocaleString()} deals · ${ent.stocks} stocks)`;
+        select.append(new Option(title, ent.name, false, false));
+      });
+    }
+
+    // Load All Market Stocks & Populate Both Pine Script, Watchlist, and Stock Explorer Dropdowns
+    async function loadMarketStocks() {
+      const genSelect = $('#genStockSelect');
+      const wlSelect = $('#wlStockAddSelect');
+      const stockSelect = $('#stockSelectInput');
+
+      genSelect.empty();
+      wlSelect.empty().append('<option value="">Type ticker to search (e.g. ASHOKA, WAAREERTL, IFCI, RELIANCE)...</option>');
+      stockSelect.empty().append('<option value="">Type to search stock or select from list...</option>');
+
+      const res = await fetch(`/api/generate?action=symbols&year=${currentFY}`);
+      if (res.ok) {
+        const json = await res.json();
+        allMarketSymbols = json.symbols || [];
+        hftSymbolsList = json.hft_symbols || [];
+        stockSummariesMap = json.summaries || {};
+
+        $('#genStocksBadge').text(`${allMarketSymbols.length} total market stocks (${hftSymbolsList.length} with HFT Buys)`);
+
+        allMarketSymbols.forEach(sym => {
+          const isHft = hftSymbolsList.includes(sym);
+          const summ = stockSummariesMap[sym];
+          const label = isHft 
+            ? `${sym} ⚡ (${summ && summ.deals ? summ.deals + ' HFT Buys' : 'HFT Tracked'})` 
+            : sym;
+
+          genSelect.append(new Option(label, sym, false, false));
+          wlSelect.append(new Option(label, sym, false, false));
+          stockSelect.append(new Option(label, sym, false, false));
+        });
+
+        // Pre-select user's watchlist in Pine Script if present
+        if (myWatchlist.length > 0) {
+          genSelect.val(myWatchlist).trigger('change');
+        } else if (hftSymbolsList.length > 0) {
+          genSelect.val(hftSymbolsList.slice(0, 5)).trigger('change');
+        }
+      }
+    }
+
+    function loadDefaultHft(name) {
+      if (!name) name = "ALL HFTs (All Institutional Desks Combined)";
+      const q = name.toUpperCase();
+      const exists = allHftEntities.find(e => {
+        const eu = e.name.toUpperCase();
+        return eu === q || eu.includes(q) || (q.includes("ALL") && eu.includes("ALL HFT"));
+      });
+      const targetName = exists ? exists.name : name;
+      $('#hftEntitySelect').val(targetName).trigger('change');
+      fetchAndDisplayEntityDeals(targetName);
+    }
+
+    // Fetch and Display Deals for an HFT Entity
+    async function fetchAndDisplayEntityDeals(clientName) {
+      currentSelectedEntity = clientName;
+      currentHftPage = 1;
+      const tbody = $('#hftDealsTableBody');
+      tbody.html('<tr><td colspan="8" class="table-empty">⏳ Loading deals from Azure Blob...</td></tr>');
+
+      try {
+        const res = await fetch(`/api/generate?action=hft_deals&client=${encodeURIComponent(clientName)}&year=${currentFY}`);
+        if (!res.ok) throw new Error("Failed to load deals");
+        const data = await res.json();
+
+        currentEntityDeals = data.deals || [];
+
+        // Render Entity Hero Banner (Exact match to screenshot)
+        $('#entityDisplayName').text(data.client_name || clientName);
+        $('#entitySubtitle').text(`${data.total_deals.toLocaleString()} bulk deals across ${data.stocks_touched} stocks`);
+        $('#pillBuySell').text(`${data.buys_count.toLocaleString()} buys · ${data.sells_count.toLocaleString()} sells`);
+        $('#pillStocksTouched').text(`${data.stocks_touched} stocks touched`);
+        $('#pillTurnover').text(`Turnover: ₹${data.total_value_cr.toLocaleString()} Cr`);
+        $('#pillBuyTurnover').text(`Buy: ₹${data.buy_value_cr.toLocaleString()} Cr`);
+        $('#pillSellTurnover').text(`Sell: ₹${data.sell_value_cr.toLocaleString()} Cr`);
+
+        $('#entityHeroBanner').slideDown(150);
+        $('#tableToolbar').slideDown(150);
+
+        renderFilteredDealsTable();
+
+      } catch (err) {
+        tbody.html(`<tr><td colspan="8" class="table-empty" style="color: #f43f5e;">Error loading deals: ${err.message}</td></tr>`);
+      }
+    }
+
+    function setSideFilter(side) {
+      currentSideFilter = side;
+      currentHftPage = 1;
+      $('.side-btn').removeClass('active buy-active sell-active');
+      $(`#sideBtn-${side}`).addClass('active');
+      if (side === 'BUY') $(`#sideBtn-${side}`).addClass('buy-active');
+      if (side === 'SELL') $(`#sideBtn-${side}`).addClass('sell-active');
+      renderFilteredDealsTable();
+    }
+
+    function renderFilteredDealsTable() {
+      const tbody = $('#hftDealsTableBody');
+      const searchTxt = ($('#dealStockSearchInput').val() || '').trim().toUpperCase();
+
+      let filtered = currentEntityDeals;
+
+      if (currentSideFilter !== 'ALL') {
+        filtered = filtered.filter(d => d.side.toUpperCase() === currentSideFilter);
+      }
+
+      if (searchTxt) {
+        filtered = filtered.filter(d => 
+          d.symbol.toUpperCase().includes(searchTxt) || 
+          d.company.toUpperCase().includes(searchTxt) ||
+          (d.client_name && d.client_name.toUpperCase().includes(searchTxt)) ||
+          (d.matched_hft && d.matched_hft.toUpperCase().includes(searchTxt))
+        );
+      }
+
+      $('#dealsCountBadge').text(`${filtered.length.toLocaleString()} deals shown`);
+
+      if (filtered.length === 0) {
+        tbody.html('<tr><td colspan="8" class="table-empty">No deals match the selected filters.</td></tr>');
+        $('#hftPaginationBar').hide();
+        return;
+      }
+
+      const totalItems = filtered.length;
+      const totalPages = Math.ceil(totalItems / hftPageSize) || 1;
+      if (currentHftPage > totalPages) currentHftPage = totalPages;
+      if (currentHftPage < 1) currentHftPage = 1;
+
+      const startIdx = (currentHftPage - 1) * hftPageSize;
+      const endIdx = Math.min(startIdx + hftPageSize, totalItems);
+      const paginatedDeals = filtered.slice(startIdx, endIdx);
+
+      $('#hftPaginationInfo').html(`Showing <b>${(startIdx + 1).toLocaleString()}</b> to <b>${endIdx.toLocaleString()}</b> of <b>${totalItems.toLocaleString()}</b> deals`);
+      $('#hftPageIndicator').text(`Page ${currentHftPage} of ${totalPages}`);
+
+      $('#hftFirstPageBtn').prop('disabled', currentHftPage <= 1);
+      $('#hftPrevPageBtn').prop('disabled', currentHftPage <= 1);
+      $('#hftNextPageBtn').prop('disabled', currentHftPage >= totalPages);
+      $('#hftLastPageBtn').prop('disabled', currentHftPage >= totalPages);
+      $('#hftPaginationBar').show();
+
+      const isAllHftSelected = currentSelectedEntity && currentSelectedEntity.startsWith("ALL HFT");
+
+      const rowsHtml = paginatedDeals.map(deal => {
+        const sideClass = deal.side.toUpperCase() === 'BUY' ? 'buy' : 'sell';
+        const clientSubtitle = isAllHftSelected && (deal.matched_hft || deal.client_name)
+          ? `<div style="font-size: 11px; color: #a78bfa; margin-top: 2px;">⚡ ${deal.matched_hft || deal.client_name}</div>`
+          : '';
+
+        return `
+          <tr>
+            <td class="td-date">${deal.date}</td>
+            <td class="td-symbol">
+              <a href="javascript:void(0)" onclick="selectAndLoadStock('${deal.symbol}')" style="color: #60a5fa; text-decoration: none;" title="View all deals for ${deal.symbol}">
+                ${deal.symbol}
+              </a>
+            </td>
+            <td class="td-company" title="${deal.company}">
+              <div>${deal.company}</div>
+              ${clientSubtitle}
+            </td>
+            <td style="text-align: center;">
+              <span class="side-badge ${sideClass}">${deal.side}</span>
+            </td>
+            <td class="td-qty">${deal.quantity_formatted}</td>
+            <td class="td-price">₹${deal.price_formatted}</td>
+            <td class="td-val">${deal.value_formatted}</td>
+            <td class="td-remarks" title="${deal.remarks}">${deal.remarks}</td>
+          </tr>
+        `;
+      }).join('');
+
+      tbody.html(rowsHtml);
+    }
+
+    function changeHftPageSize(size) {
+      hftPageSize = parseInt(size, 10);
+      currentHftPage = 1;
+      renderFilteredDealsTable();
+    }
+
+    function goToHftPage(page) {
+      currentHftPage = page;
+      renderFilteredDealsTable();
+      const toolbar = document.getElementById('tableToolbar');
+      if (toolbar) toolbar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function exportCurrentHftCsv() {
+      if (!currentEntityDeals || currentEntityDeals.length === 0) {
+        alert("No deals available to export.");
+        return;
+      }
+
+      let csv = "Date,Symbol,Company,Side,Quantity,Price,Value,Remarks\n";
+      currentEntityDeals.forEach(d => {
+        const row = [
+          `"${d.date}"`,
+          `"${d.symbol}"`,
+          `"${d.company.replace(/"/g, '""')}"`,
+          `"${d.side}"`,
+          d.quantity,
+          d.price,
+          `"${d.value_formatted}"`,
+          `"${d.remarks.replace(/"/g, '""')}"`
+        ];
+        csv += row.join(",") + "\n";
+      });
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${(currentSelectedEntity || 'HFT_Deals').replace(/\s+/g, '_')}_${currentFY}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // ==========================================
+    // Pine Script Generator Logic
+    // ==========================================
+    function selectAllGeneratorStocks() {
+      $('#genStockSelect').val(allMarketSymbols).trigger('change');
+    }
+
+    function clearGeneratorSelection() {
+      $('#genStockSelect').val([]).trigger('change');
+      $('#pineOutputArea').val('');
+      $('#pineCharCount').text('0 chars');
+    }
+
+    function loadWatchlistIntoGenerator() {
+      if (myWatchlist.length === 0) {
+        alert("Watchlist is currently empty! Add stocks in the Watchlist Manager tab.");
+        return;
+      }
+      $('#genStockSelect').val(myWatchlist).trigger('change');
+    }
+
+    async function generatePineScript() {
+      const selected = $('#genStockSelect').val() || [];
+      const btn = $('#btnGeneratePine');
+      const area = $('#pineOutputArea');
+
+      if (selected.length === 0) {
+        alert("Please select at least one stock to generate Pine Script!");
+        return;
+      }
+
+      const activeYear = $('#genFySelect').val() || $('#fySelect').val() || currentFY || "2026-27";
+      btn.prop('disabled', true).text("⏳ Compiling...");
+      area.val(`// Fetching and compiling Pine Script for ${selected.length} stocks from FY ${activeYear} data...`);
+
+      try {
+        const qSyms = selected.length === allMarketSymbols.length ? "ALL" : selected.join(",");
+        const res = await fetch(`/api/generate?symbols=${encodeURIComponent(qSyms)}&year=${encodeURIComponent(activeYear)}`);
+        if (!res.ok) throw new Error(await res.text());
+        const code = await res.text();
+
+        area.val(code);
+        $('#pineScriptMeta').text(`indicator("HFT Tracker [${activeYear}]") • ${selected.length} Stocks`);
+        $('#pineCharCount').text(`${code.length.toLocaleString()} chars`);
+      } catch (err) {
+        area.val(`// Error generating script: ${err.message}`);
+      } finally {
+        btn.prop('disabled', false).text("⚡ Generate Pine Script v5");
+      }
+    }
+
+    function copyPineScript() {
+      const code = $('#pineOutputArea').val();
+      if (!code) return;
+      navigator.clipboard.writeText(code).then(() => {
+        $('#pineCopyNotice').fadeIn(150);
+        setTimeout(() => $('#pineCopyNotice').fadeOut(200), 2500);
+      });
+    }
+
+    function downloadPineScript() {
+      const code = $('#pineOutputArea').val();
+      if (!code) return;
+      const activeYear = $('#genFySelect').val() || $('#fySelect').val() || currentFY || "2026-27";
+      const blob = new Blob([code], { type: "text/plain;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `HFT_Tracker_${activeYear}.pine`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // ==========================================
+    // Watchlist Management Logic
+    // ==========================================
+    async function loadWatchlist() {
       try {
         const res = await fetch("/api/generate?action=watchlist");
         if (res.ok) {
           const data = await res.json();
-          if (data && Array.isArray(data.watchlist)) {
+          if (Array.isArray(data.watchlist)) {
             myWatchlist = data.watchlist;
-            saveWatchlistToLocalBackup();
-            if (syncBadge) {
-              syncBadge.innerText = data.storage === "azure_blob" || data.storage === "azure_blob_sas" 
-                ? "☁️ Azure Blob Synced" 
-                : "💾 Cloud / Server Synced";
-              syncBadge.style.color = "#7ee787";
-            }
-            renderWatchlist();
+            renderWatchlistUI();
             return;
           }
         }
-      } catch (err) {
-        console.warn("Could not load watchlist from server, falling back to local storage:", err);
+      } catch (e) {
+        console.warn("Watchlist API error, falling back to local:", e);
       }
 
-      // Offline fallback
       try {
         const saved = localStorage.getItem("hft_user_watchlist");
-        if (saved) {
-          myWatchlist = JSON.parse(saved);
-        }
+        if (saved) myWatchlist = JSON.parse(saved);
       } catch (e) {}
-
-      if (syncBadge) {
-        syncBadge.innerText = "💾 Local Cache";
-        syncBadge.style.color = "#8b949e";
-      }
-      renderWatchlist();
+      renderWatchlistUI();
     }
 
-    function saveWatchlistToLocalBackup() {
-      try {
-        localStorage.setItem("hft_user_watchlist", JSON.stringify(myWatchlist));
-      } catch (e) {}
-    }
+    function renderWatchlistUI(filterQuery = "") {
+      $('#tabWlCount').text(myWatchlist.length);
+      $('#genWlCount').text(myWatchlist.length);
 
-    function renderWatchlist() {
-      const container = document.getElementById("watchlistPills");
-      const countLabel = document.getElementById("watchlistCount");
-      if (countLabel) countLabel.innerText = myWatchlist.length;
+      const container = $('#watchlistPillsList');
+      container.empty();
 
-      container.innerHTML = "";
       if (myWatchlist.length === 0) {
-        container.innerHTML = '<span class="wl-empty">Your watchlist is empty. Search stocks above and click "➕ Add to Watchlist".</span>';
+        container.html('<span style="color: var(--text-muted); font-size: 13px; font-style: italic;">Your watchlist is currently empty. Use the search box above to add stocks.</span>');
         return;
       }
 
-      myWatchlist.forEach(sym => {
-        const pill = document.createElement("span");
-        pill.className = "wl-pill";
-        pill.innerHTML = `<span>${sym}</span> <span class="wl-pill-remove" onclick="removeStockFromWatchlist('${sym}')" title="Remove ${sym}">×</span>`;
-        container.appendChild(pill);
+      const q = (filterQuery || '').trim().toUpperCase();
+      const listToShow = q ? myWatchlist.filter(s => s.toUpperCase().includes(q)) : myWatchlist;
+
+      if (listToShow.length === 0) {
+        container.html('<span style="color: var(--text-muted); font-size: 13px; font-style: italic;">No saved stocks match your filter query.</span>');
+        return;
+      }
+
+      listToShow.forEach(sym => {
+        container.append(`
+          <span class="wl-stock-badge">
+            <span>${sym}</span>
+            <span class="wl-remove-btn" onclick="removeWatchlistSymbol('${sym}')" title="Remove from Azure Blob">×</span>
+          </span>
+        `);
       });
     }
 
-    async function addSingleStockToWatchlist(sym) {
-      const up = sym.toUpperCase().trim();
-      if (!up) return;
-      if (myWatchlist.includes(up)) {
-        showWatchlistToast(`${up} is already in your watchlist.`, "info");
-        return;
-      }
-
-      showWatchlistToast(`Saving ${up} permanently to Blob watchlist...`, "info");
-      try {
-        const res = await fetch("/api/generate?action=watchlist_add&symbol=" + encodeURIComponent(up));
-        if (res.ok) {
-          const data = await res.json();
-          if (data && Array.isArray(data.watchlist)) {
-            myWatchlist = data.watchlist;
-            saveWatchlistToLocalBackup();
-            renderWatchlist();
-            renderSelectedTable();
-            showWatchlistToast(`✓ Saved ${up} permanently to Blob Watchlist!`, "success");
-            return;
-          }
-        }
-      } catch (err) {
-        console.error("Failed to persist to Blob:", err);
-      }
-
-      // Local fallback if server unreachable
-      myWatchlist.push(up);
-      saveWatchlistToLocalBackup();
-      renderWatchlist();
-      renderSelectedTable();
-      showWatchlistToast(`✓ Saved ${up} locally (Server unreachable)`, "success");
+    function filterSavedWatchlistPills(query) {
+      renderWatchlistUI(query);
     }
 
-    async function addSelectedToWatchlist() {
-      const selected = $('#stockSelect').val() || [];
-      if (selected.length === 0) {
-        alert("Please select one or more stocks from the dropdown above to add to your watchlist!");
+    async function addSelectedDropdownStockToWatchlist() {
+      const select = $('#wlStockAddSelect');
+      const val = select.val();
+      if (!val) {
+        alert("Please select or type a stock name first.");
         return;
       }
 
-      const toAdd = selected.map(s => s.toUpperCase().trim()).filter(s => !myWatchlist.includes(s));
-      if (toAdd.length === 0) {
-        alert("All selected stocks are already in your watchlist!");
+      const sym = val.trim().toUpperCase();
+      if (myWatchlist.includes(sym)) {
+        showWatchlistToast(`${sym} is already in your watchlist.`, "info");
         return;
       }
 
-      showWatchlistToast(`Saving ${toAdd.length} stock(s) permanently to Blob watchlist...`, "info");
+      showWatchlistToast(`Saving ${sym} permanently to Azure Blob...`, "info");
       try {
-        const res = await fetch("/api/generate?action=watchlist_add&symbols=" + encodeURIComponent(toAdd.join(",")));
+        const res = await fetch(`/api/generate?action=watchlist_add&symbol=${encodeURIComponent(sym)}`);
         if (res.ok) {
           const data = await res.json();
-          if (data && Array.isArray(data.watchlist)) {
-            myWatchlist = data.watchlist;
-            saveWatchlistToLocalBackup();
-            renderWatchlist();
-            renderSelectedTable();
-            showWatchlistToast(`✓ Added ${toAdd.length} new stock(s) permanently to Blob! Total: ${myWatchlist.length}`, "success");
-            return;
-          }
+          myWatchlist = data.watchlist || [];
+          select.val('').trigger('change');
+          renderWatchlistUI();
+          showWatchlistToast(`✓ Saved ${sym} permanently to Azure Blob!`, "success");
+          return;
         }
       } catch (err) {
-        console.error("Failed to persist batch to Blob:", err);
+        console.error("Watchlist save error:", err);
       }
 
       // Local fallback
-      toAdd.forEach(s => myWatchlist.push(s));
-      saveWatchlistToLocalBackup();
-      renderWatchlist();
-      renderSelectedTable();
-      showWatchlistToast(`✓ Added ${toAdd.length} new stock(s) locally. Total: ${myWatchlist.length}`, "success");
+      myWatchlist.push(sym);
+      localStorage.setItem("hft_user_watchlist", JSON.stringify(myWatchlist));
+      select.val('').trigger('change');
+      renderWatchlistUI();
+      showWatchlistToast("Saved locally (Server offline)", "info");
     }
 
-    async function removeStockFromWatchlist(sym) {
-      const up = sym.toUpperCase().trim();
-      showWatchlistToast(`Removing ${up} from Blob watchlist...`, "info");
+    async function addCustomWatchlistSymbols() {
+      const input = $('#newWatchlistInput');
+      const val = input.val().trim();
+      if (!val) return;
+
+      const newSyms = val.split(/[,\s]+/).map(s => s.trim().toUpperCase()).filter(s => s.length > 1 && !myWatchlist.includes(s));
+      if (newSyms.length === 0) {
+        showWatchlistToast("Stocks are already in watchlist or invalid.", "info");
+        return;
+      }
+
+      showWatchlistToast(`Saving ${newSyms.length} stock(s) permanently to Azure Blob...`, "info");
       try {
-        const res = await fetch("/api/generate?action=watchlist_remove&symbol=" + encodeURIComponent(up));
+        const res = await fetch(`/api/generate?action=watchlist_add&symbols=${encodeURIComponent(newSyms.join(','))}`);
         if (res.ok) {
           const data = await res.json();
-          if (data && Array.isArray(data.watchlist)) {
-            myWatchlist = data.watchlist;
-            saveWatchlistToLocalBackup();
-            renderWatchlist();
-            renderSelectedTable();
-            showWatchlistToast(`✓ Removed ${up} from Blob Watchlist!`, "success");
-            return;
-          }
+          myWatchlist = data.watchlist || [];
+          input.val('');
+          renderWatchlistUI();
+          showWatchlistToast(`✓ Saved ${newSyms.length} stock(s) permanently to Azure Blob!`, "success");
+          return;
         }
       } catch (err) {
-        console.error("Failed to delete from Blob:", err);
+        console.error("Watchlist save error:", err);
       }
 
-      myWatchlist = myWatchlist.filter(s => s !== up);
-      saveWatchlistToLocalBackup();
-      renderWatchlist();
-      renderSelectedTable();
-      showWatchlistToast(`✓ Removed ${up} from Watchlist!`, "success");
+      // Local fallback
+      newSyms.forEach(s => myWatchlist.push(s));
+      localStorage.setItem("hft_user_watchlist", JSON.stringify(myWatchlist));
+      input.val('');
+      renderWatchlistUI();
+      showWatchlistToast("Saved locally (Server offline)", "info");
     }
 
-    async function clearWatchlist() {
+    async function removeWatchlistSymbol(sym) {
+      showWatchlistToast(`Removing ${sym} from Blob watchlist...`, "info");
+      try {
+        const res = await fetch(`/api/generate?action=watchlist_remove&symbol=${encodeURIComponent(sym)}`);
+        if (res.ok) {
+          const data = await res.json();
+          myWatchlist = data.watchlist || [];
+          renderWatchlistUI();
+          showWatchlistToast(`✓ Removed ${sym} from Azure Blob Watchlist`, "success");
+          return;
+        }
+      } catch (e) {}
+
+      myWatchlist = myWatchlist.filter(s => s !== sym);
+      localStorage.setItem("hft_user_watchlist", JSON.stringify(myWatchlist));
+      renderWatchlistUI();
+    }
+
+    async function clearWatchlistAll() {
       if (myWatchlist.length === 0) return;
-      if (confirm("Are you sure you want to clear your saved watchlist permanently from Azure Blob?")) {
-        showWatchlistToast("Clearing Blob watchlist...", "info");
-        try {
-          const res = await fetch("/api/generate?action=watchlist_clear");
-          if (res.ok) {
-            myWatchlist = [];
-            saveWatchlistToLocalBackup();
-            renderWatchlist();
-            renderSelectedTable();
-            showWatchlistToast("✓ Azure Blob watchlist cleared!", "success");
-            return;
-          }
-        } catch (err) {
-          console.error("Failed to clear Blob:", err);
+      if (!confirm("Are you sure you want to clear your entire watchlist permanently from Azure Blob?")) return;
+
+      try {
+        const res = await fetch("/api/generate?action=watchlist_clear");
+        if (res.ok) {
+          myWatchlist = [];
+          renderWatchlistUI();
+          showWatchlistToast("✓ Azure Blob watchlist cleared", "success");
+          return;
         }
+      } catch (e) {}
 
-        myWatchlist = [];
-        saveWatchlistToLocalBackup();
-        renderWatchlist();
-        renderSelectedTable();
-        showWatchlistToast("✓ Watchlist cleared!", "success");
-      }
-    }
-
-    function renderSelectedTable() {
-      const selected = $('#stockSelect').val() || [];
-      const section = document.getElementById("selectionTableSection");
-      const tbody = document.getElementById("selectedTableBody");
-      const countBadge = document.getElementById("selectedCountBadge");
-
-      if (selected.length === 0) {
-        section.style.display = "none";
-        tbody.innerHTML = "";
-        return;
-      }
-
-      section.style.display = "block";
-      countBadge.innerText = `${selected.length} stock(s) selected`;
-      tbody.innerHTML = "";
-
-      selected.forEach(sym => {
-        const info = stockSummaries[sym] || {
-          deals: 0,
-          desks_count: 0,
-          desks: [],
-          latest_date: "NA",
-          first_date: "NA"
-        };
-
-        const inWl = myWatchlist.includes(sym);
-        const row = document.createElement("tr");
-
-        let desksHtml = "";
-        if (info.desks && info.desks.length > 0) {
-          const preview = info.desks.slice(0, 4);
-          desksHtml = preview.map(d => `<span class="desk-badge">${d}</span>`).join("");
-          if (info.desks.length > 4) {
-            desksHtml += `<span class="desk-badge" style="background:#30363d; color:#8b949e;">+${info.desks.length - 4} more</span>`;
-          }
-        } else {
-          desksHtml = '<span style="color:#8b949e;">No deals tracked</span>';
-        }
-
-        const actionBtnHtml = inWl 
-          ? `<button class="btn-wl in-wl" onclick="removeStockFromWatchlist('${sym}')" title="Click to remove from Watchlist">⭐ In Watchlist</button>`
-          : `<button class="btn-wl add-wl" onclick="addSingleStockToWatchlist('${sym}')" title="Click to add to your Watchlist">➕ Add to Watchlist</button>`;
-
-        row.innerHTML = `
-          <td class="sym-col">${sym}</td>
-          <td class="deals-col">${info.deals > 0 ? info.deals + ' Buy Days' : '0 Deals'}</td>
-          <td>${info.desks_count > 0 ? '<b>' + info.desks_count + ' Desks:</b> ' : ''}${desksHtml}</td>
-          <td>${info.latest_date}</td>
-          <td>${info.first_date}</td>
-          <td>${actionBtnHtml}</td>
-        `;
-        tbody.appendChild(row);
-      });
-    }
-
-    function loadWatchlistIntoDropdown() {
-      if (myWatchlist.length === 0) {
-        alert("Your watchlist is currently empty!");
-        return;
-      }
-      $('#stockSelect').val(myWatchlist).trigger('change');
-    }
-
-    function generateForWatchlist() {
-      if (myWatchlist.length === 0) {
-        alert("Your watchlist is currently empty! Search and add stocks first.");
-        return;
-      }
-      $('#stockSelect').val(myWatchlist).trigger('change');
-      generateScript();
+      myWatchlist = [];
+      localStorage.removeItem("hft_user_watchlist");
+      renderWatchlistUI();
     }
 
     function downloadWatchlistExcel() {
       window.open("https://mywebsitecontainer.blob.core.windows.net/hft/watchlist.xlsx", "_blank");
     }
 
-    async function initSymbols() {
-      const badge = document.getElementById("statusBadge");
-      try {
-        badge.className = "badge loading";
-        badge.innerText = "Fetching stocks from Azure Blob...";
-        
-        const res = await fetch("/api/generate?action=symbols");
-        if (!res.ok) throw new Error("HTTP " + res.status);
-        const data = await res.json();
-        
-        allSymbols = data.symbols || [];
-        stockSummaries = data.summaries || {};
-
-        const select = $('#stockSelect');
-        select.empty();
-
-        allSymbols.forEach(sym => {
-          select.append(new Option(sym, sym, false, false));
-        });
-
-        badge.className = "badge";
-        badge.innerText = `✓ ${allSymbols.length} stocks with HFT Buys (12 Desks)`;
-
-        // Pre-select user's saved watchlist if available, else first 3 stocks
-        if (myWatchlist.length > 0) {
-          select.val(myWatchlist).trigger('change');
-          generateScript();
-        } else if (allSymbols.length > 0) {
-          const defaults = allSymbols.slice(0, 3);
-          select.val(defaults).trigger('change');
-          generateScript();
-        }
-      } catch (err) {
-        console.error("Failed to load symbols:", err);
-        badge.className = "badge loading";
-        badge.innerText = "Error loading symbols";
-        document.getElementById("output").value = "// Error loading stock list from server: " + err.message + "\n// Please try refreshing the page.";
+    function showWatchlistToast(msg, type) {
+      const toast = $('#wlToastMsg');
+      toast.text(msg);
+      if (type === 'success') {
+        toast.css({ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid #10b981', color: '#6ee7b7' });
+      } else {
+        toast.css({ background: 'rgba(59, 130, 246, 0.15)', border: '1px solid #3b82f6', color: '#93c5fd' });
       }
+      toast.fadeIn(150);
+      setTimeout(() => toast.fadeOut(200), 3200);
     }
 
-    function selectAll() {
-      $('#stockSelect').val(allSymbols).trigger('change');
-    }
-
-    function clearAll() {
-      $('#stockSelect').val([]).trigger('change');
-      document.getElementById("output").value = "";
-      document.getElementById("scriptStats").innerText = "Pine Script v5 Indicator";
-    }
-
-    async function generateScript() {
-      const selected = $('#stockSelect').val() || [];
-      const area = document.getElementById("output");
-      const genBtn = document.getElementById("btnGenerate");
-      const stats = document.getElementById("scriptStats");
-
-      if (selected.length === 0) {
-        alert("Please select at least one stock to generate script!");
-        return;
-      }
-
-      genBtn.disabled = true;
-      genBtn.innerText = "⏳ Generating...";
-      area.value = "Fetching and compiling Pine Script for " + selected.length + " stock(s)...";
-
-      try {
-        const query = selected.length === allSymbols.length 
-          ? "/api/generate?symbols=ALL" 
-          : "/api/generate?symbols=" + encodeURIComponent(selected.join(","));
-
-        const res = await fetch(query);
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(errText || ("HTTP " + res.status));
-        }
-
-        const script = await res.text();
-        area.value = script;
-        stats.innerText = `Pine Script v5 | ${selected.length} Stock(s) | ${script.length.toLocaleString()} characters`;
-      } catch (err) {
-        area.value = "// Error generating Pine Script: " + err.message;
-      } finally {
-        genBtn.disabled = false;
-        genBtn.innerText = "⚡ Generate Pine Script";
-      }
-    }
-
-    function copyCode() {
-      const area = document.getElementById("output");
-      if (!area.value) return;
-      area.select();
-      navigator.clipboard.writeText(area.value);
-
-      const btn = document.getElementById("btnCopy");
-      const notice = document.getElementById("copyNotice");
-
-      btn.classList.add("copied");
-      btn.innerText = "✓ Copied!";
-      notice.style.display = "block";
-
-      setTimeout(() => {
-        btn.classList.remove("copied");
-        btn.innerText = "📋 Copy Code";
-        notice.style.display = "none";
-      }, 2000);
+    function escapeQuotes(str) {
+      return (str || '').replace(/'/g, "\\'");
     }
   </script>
 </body>

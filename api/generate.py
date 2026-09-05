@@ -22,12 +22,16 @@ if os.path.exists(_env_file):
     except Exception:
         pass
 
+BLOB_BASE_URL = "https://mywebsitecontainer.blob.core.windows.net/hft/"
 BLOB_CSV_URL = "https://mywebsitecontainer.blob.core.windows.net/hft/hft.csv"
 WATCHLIST_XLSX_URL = "https://mywebsitecontainer.blob.core.windows.net/hft/watchlist.xlsx"
 
 TRACKED_HFTS = {
     "JUMP TRADING": "Jump Trading",
     "QE SECURI": "QE Securities",
+    "QC SECURI": "QE Securities",
+    "QE SECURITIES": "QE Securities",
+    "QC SECURITIES": "QE Securities",
     "JUNOMON": "Junomoneta",
     "NK SECURI": "NK Securities",
     "HRTI PRIV": "HRTI",
@@ -36,21 +40,75 @@ TRACKED_HFTS = {
     "ELIXIR WE": "Elixir Wealth",
     "MICROCU": "Microcurves",
     "ALPHA GRE": "Alpha Alternatives",
+    "ALPHAGREP": "Alpha Alternatives",
     "BLITZQUA": "Blitzkraft",
     "IRAGE": "iRage Capital",
+    "MATHISYS": "Mathisys",
+    "MUSIGMA": "Musigma",
+    "SILVERLEAF": "Silverleaf",
+    "AAKRAYA": "Aakraya Research",
+    "NEO APEX": "Neo Apex",
 }
 
 _WATCHLIST_CACHE = None
+_RAW_DF_CACHE = {}
+_GROUPED_CACHE = {}
+
+
+def normalize_fy(year_str):
+    if not year_str:
+        return "2026-27"
+    y = str(year_str).strip()
+    y_lower = y.lower()
+    if "25026" in y_lower or y_lower in ["2025-25", "25-26", "2025-2026"]:
+        return "2025-26"
+    if y_lower in ["2026-2027", "26-27"]:
+        return "2026-27"
+    import re
+    m = re.search(r'(\d{4}[-/]\d{2,4})', y)
+    if m:
+        raw = m.group(1).replace('/', '-')
+        parts = raw.split('-')
+        if len(parts) == 2:
+            p1 = parts[0]
+            p2 = parts[1] if len(parts[1]) == 2 else parts[1][-2:]
+            return f"{p1}-{p2}"
+        return raw
+    m_short = re.search(r'(\d{2}[-/]\d{2})', y)
+    if m_short:
+        raw = m_short.group(1).replace('/', '-')
+        parts = raw.split('-')
+        return f"20{parts[0]}-{parts[1]}"
+    if "25" in y_lower:
+        return "2025-26"
+    if "26" in y_lower:
+        return "2026-27"
+    return y
 
 
 def match_hft(client_name):
     if not isinstance(client_name, str):
         return None
-    c_upper = client_name.upper()
+    c_upper = client_name.upper().strip()
     for key, display_name in TRACKED_HFTS.items():
         if key in c_upper:
             return display_name
     return None
+
+
+def format_inr_value(val):
+    if pd.isna(val) or val is None:
+        return "₹0.00"
+    try:
+        val = float(val)
+        if val >= 10000000:
+            return f"₹{val / 10000000:.2f} Cr"
+        elif val >= 100000:
+            return f"₹{val / 100000:.2f} L"
+        else:
+            return f"₹{val:,.2f}"
+    except Exception:
+        return "₹0.00"
 
 
 def fetch_watchlist(force_reload=False):
@@ -144,40 +202,101 @@ def save_watchlist(symbols):
     return {"status": "success", "storage": "local", "symbols": clean_syms, "file": "watchlist.xlsx"}
 
 
-_DATA_CACHE = None
+def fetch_raw_fy_df(year="2026-27", force_reload=False):
+    """Fetches raw CSV data from Azure Blob for the requested Financial Year."""
+    global _RAW_DF_CACHE
+    norm_year = normalize_fy(year)
+    if not force_reload and norm_year in _RAW_DF_CACHE:
+        return _RAW_DF_CACHE[norm_year]
 
+    blob_name = f"{norm_year}.csv"
+    raw_bytes = None
 
-def fetch_and_process_hft_data():
-    global _DATA_CACHE
-    if _DATA_CACHE is not None:
-        return _DATA_CACHE
+    # 1. Direct BlobClient via connection string
+    conn_str = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
+    if conn_str:
+        try:
+            from azure.storage.blob import BlobClient
+            bc = BlobClient.from_connection_string(conn_str, container_name="hft", blob_name=blob_name)
+            raw_bytes = bc.download_blob().readall()
+        except Exception as e:
+            print(f"BlobClient download error for {blob_name}: {e}")
 
-    resp = requests.get(BLOB_CSV_URL, timeout=12)
-    resp.raise_for_status()
+    # 2. HTTP Blob URL fallback
+    if raw_bytes is None:
+        url = f"{BLOB_BASE_URL}{blob_name}"
+        resp = requests.get(url, timeout=15)
+        resp.raise_for_status()
+        raw_bytes = resp.content
 
-    df = pd.read_csv(io.StringIO(resp.text), encoding="utf-8-sig")
-    df.columns = df.columns.str.strip().str.replace('"', "").str.replace("'", "")
+    df = pd.read_csv(io.BytesIO(raw_bytes), encoding="utf-8-sig")
+    df.columns = [c.strip().replace('"', '').replace("'", "") for c in df.columns]
 
-    date_col = next(c for c in df.columns if "date" in c.lower())
-    symbol_col = next(c for c in df.columns if "symbol" in c.lower())
-    client_col = next(c for c in df.columns if "client" in c.lower())
-    bs_col = next((c for c in df.columns if "buy" in c.lower() or "sell" in c.lower()), None)
+    date_col = next((c for c in df.columns if "date" in c.lower()), df.columns[0])
+    symbol_col = next((c for c in df.columns if "symbol" in c.lower()), df.columns[1])
+    sec_col = next((c for c in df.columns if any(k in c.lower() for k in ["security", "company", "name"])), None)
+    client_col = next((c for c in df.columns if "client" in c.lower()), None)
+    bs_col = next((c for c in df.columns if any(k in c.lower() for k in ["buy", "sell", "side"])), None)
+    qty_col = next((c for c in df.columns if "quant" in c.lower()), None)
+    price_col = next((c for c in df.columns if any(k in c.lower() for k in ["price", "trade price", "wght"])), None)
+    rem_col = next((c for c in df.columns if "remark" in c.lower()), None)
 
     df["CleanSym"] = df[symbol_col].astype(str).str.strip().str.upper()
-    df["Matched_HFT"] = df[client_col].apply(match_hft)
+    df["CleanClient"] = df[client_col].astype(str).str.strip() if client_col else ""
+    df["ClientUpper"] = df["CleanClient"].str.upper()
+    df["CleanSide"] = df[bs_col].astype(str).str.strip().str.upper() if bs_col else "BUY"
+    df["SecurityName"] = df[sec_col].astype(str).str.strip() if sec_col else df["CleanSym"]
+    df["RemarksText"] = df[rem_col].astype(str).str.strip() if rem_col else "-"
+    df["Matched_HFT"] = df["CleanClient"].apply(match_hft)
 
-    hft_df = df.dropna(subset=["Matched_HFT"]).copy()
+    # Clean numeric quantity
+    if qty_col:
+        qty_s = df[qty_col].astype(str).str.replace(",", "").str.strip()
+        df["CleanQty"] = pd.to_numeric(qty_s, errors="coerce").fillna(0).astype(int)
+    else:
+        df["CleanQty"] = 0
 
-    # Filter strictly to BUY deals so only institutional HFT accumulation is tracked
-    if bs_col:
-        hft_df = hft_df[hft_df[bs_col].astype(str).str.upper().str.strip() == "BUY"].copy()
+    # Clean numeric price
+    if price_col:
+        price_s = df[price_col].astype(str).str.replace(",", "").str.strip()
+        df["CleanPrice"] = pd.to_numeric(price_s, errors="coerce").fillna(0.0)
+    else:
+        df["CleanPrice"] = 0.0
+
+    df["DealValue"] = df["CleanQty"] * df["CleanPrice"]
+    df["ValueCr"] = df["DealValue"] / 10000000.0
 
     # Optimized date parsing
     try:
-        hft_df["ParsedDate"] = pd.to_datetime(hft_df[date_col], format="%d-%b-%y", errors="coerce")
+        df["ParsedDate"] = pd.to_datetime(df[date_col], format="%d-%b-%Y", errors="coerce")
     except Exception:
-        hft_df["ParsedDate"] = pd.to_datetime(hft_df[date_col], errors="coerce")
+        df["ParsedDate"] = pd.to_datetime(df[date_col], errors="coerce")
 
+    nan_dates = df["ParsedDate"].isna()
+    if nan_dates.any():
+        try:
+            df.loc[nan_dates, "ParsedDate"] = pd.to_datetime(df.loc[nan_dates, date_col], format="%d-%b-%y", errors="coerce")
+        except Exception:
+            pass
+
+    df["DisplayDate"] = df["ParsedDate"].dt.strftime("%B %d %Y").fillna(df[date_col].astype(str))
+    df["DateFormatted"] = df["ParsedDate"].dt.strftime("%d-%b-%Y").fillna(df[date_col].astype(str))
+
+    _RAW_DF_CACHE[norm_year] = df
+    return df
+
+
+def fetch_and_process_hft_data(year="2026-27"):
+    """Processed BUY deal data grouped by Symbol and Date for Pine Script indicator generation."""
+    global _GROUPED_CACHE
+    norm_year = normalize_fy(year)
+    if norm_year in _GROUPED_CACHE:
+        return _GROUPED_CACHE[norm_year]
+
+    raw_df = fetch_raw_fy_df(norm_year)
+    hft_df = raw_df.dropna(subset=["Matched_HFT"]).copy()
+    # Filter strictly to BUY deals for the confluence indicator
+    hft_df = hft_df[hft_df["CleanSide"] == "BUY"].copy()
     hft_df = hft_df.dropna(subset=["ParsedDate"])
 
     grouped = (
@@ -186,11 +305,384 @@ def fetch_and_process_hft_data():
         .reset_index()
     )
     grouped = grouped.sort_values(by=["CleanSym", "ParsedDate"])
-    _DATA_CACHE = grouped
+    _GROUPED_CACHE[norm_year] = grouped
     return grouped
 
 
-def generate_pinescript(grouped, selected_syms=None):
+def get_hft_entities_summary(year="2026-27", search_q=None):
+    """Returns list of unique HFT/client entities with deal statistics for the dropdown."""
+    df = fetch_raw_fy_df(year)
+    grouped = df.groupby("CleanClient")
+    
+    stats = grouped.agg(
+        total_deals=("CleanSym", "count"),
+        buys_count=("CleanSide", lambda s: (s == "BUY").sum()),
+        sells_count=("CleanSide", lambda s: (s == "SELL").sum()),
+        stocks_count=("CleanSym", "nunique"),
+        turnover_cr=("ValueCr", "sum"),
+        matched_hft=("Matched_HFT", "first")
+    ).reset_index()
+
+    stats["turnover_cr"] = stats["turnover_cr"].round(2)
+    stats = stats.sort_values(by="total_deals", ascending=False)
+
+    q_clean = search_q.strip().upper() if search_q else None
+    records = []
+
+    # Insert default 'ALL HFTs' option at the very top of the list
+    hft_mask = df["Matched_HFT"].notna()
+    if hft_mask.any() and (not q_clean or any(term in q_clean for term in ["ALL", "HFT", "INSTITUTION"])):
+        hft_sub = df[hft_mask]
+        records.append({
+            "name": "ALL HFTs (All Institutional Desks Combined)",
+            "deals": len(hft_sub),
+            "buys": int((hft_sub["CleanSide"] == "BUY").sum()),
+            "sells": int((hft_sub["CleanSide"] == "SELL").sum()),
+            "stocks": int(hft_sub["CleanSym"].nunique()),
+            "turnover_cr": float(hft_sub["ValueCr"].sum().round(2)),
+            "matched_hft": "ALL_HFT",
+            "is_tracked": True,
+            "is_all": True
+        })
+
+    for _, row in stats.iterrows():
+        c_name = row["CleanClient"]
+        if not c_name:
+            continue
+        c_upper = c_name.upper()
+        if q_clean:
+            if q_clean == "QC" or q_clean == "QC SECURITIES":
+                if not ("QE SECURI" in c_upper or "QC SECURI" in c_upper):
+                    continue
+            elif q_clean not in c_upper:
+                continue
+
+        records.append({
+            "name": c_name,
+            "deals": int(row["total_deals"]),
+            "buys": int(row["buys_count"]),
+            "sells": int(row["sells_count"]),
+            "stocks": int(row["stocks_count"]),
+            "turnover_cr": float(row["turnover_cr"]),
+            "matched_hft": row["matched_hft"] if pd.notna(row["matched_hft"]) else None,
+            "is_tracked": bool(pd.notna(row["matched_hft"]))
+        })
+    return records
+
+
+def get_hft_deals(client_query, year="2026-27", side="ALL", stock_filter=None, limit=5000):
+    """Returns detailed deals for a selected HFT entity, or ALL HFTs combined, case-insensitively, with Buy & Sell data."""
+    df = fetch_raw_fy_df(year)
+    if not client_query:
+        return {"error": "Client query required", "deals": [], "total_deals": 0}
+
+    q = client_query.strip().upper()
+    is_all_hft = (
+        q in ["ALL", "ALL HFT", "ALL HFTS", "ALL_HFT", "ALL_HFTS", "ALL INSTITUTIONAL DESKS"] 
+        or "ALL HFT" in q
+    )
+
+    if is_all_hft:
+        sub = df[df["Matched_HFT"].notna()].copy()
+        matched_name = "ALL HFTs (All Institutional Desks Combined)"
+    elif "QC SECURI" in q or q == "QC":
+        mask = df["ClientUpper"].str.contains("QE SECURI|QC SECURI", regex=True, na=False)
+        sub = df[mask].copy()
+        matched_name = sub["CleanClient"].iloc[0] if not sub.empty else client_query
+    else:
+        mask = (df["ClientUpper"] == q) | (df["ClientUpper"].str.contains(q, regex=False, na=False))
+        sub = df[mask].copy()
+        if sub.empty:
+            sub = df[df["Matched_HFT"].str.upper() == q].copy()
+        matched_name = sub["CleanClient"].iloc[0] if not sub.empty else client_query
+
+    if sub.empty:
+        return {
+            "client_name": client_query,
+            "total_deals": 0,
+            "buys_count": 0,
+            "sells_count": 0,
+            "stocks_touched": 0,
+            "total_value_cr": 0.0,
+            "buy_value_cr": 0.0,
+            "sell_value_cr": 0.0,
+            "deals": []
+        }
+
+    total_deals = len(sub)
+    buys_count = int((sub["CleanSide"] == "BUY").sum())
+    sells_count = int((sub["CleanSide"] == "SELL").sum())
+    stocks_touched = int(sub["CleanSym"].nunique())
+    total_val = float(sub["ValueCr"].sum().round(2))
+    buy_val = float(sub[sub["CleanSide"] == "BUY"]["ValueCr"].sum().round(2))
+    sell_val = float(sub[sub["CleanSide"] == "SELL"]["ValueCr"].sum().round(2))
+
+    # Apply side filter
+    if side and side.upper() in ["BUY", "SELL"]:
+        sub = sub[sub["CleanSide"] == side.upper()]
+
+    # Apply stock filter
+    if stock_filter:
+        s_clean = stock_filter.strip().upper()
+        sub = sub[sub["CleanSym"].str.contains(s_clean, regex=False, na=False)]
+
+    # Sort: Date desc, Symbol asc, Side asc (BUY before SELL)
+    sub["SideOrder"] = sub["CleanSide"].apply(lambda s: 0 if s == "BUY" else 1)
+    sub = sub.sort_values(by=["ParsedDate", "CleanSym", "SideOrder"], ascending=[False, True, True])
+
+    deals_list = []
+    for _, row in sub.head(limit).iterrows():
+        qty_int = int(row["CleanQty"])
+        price_flt = float(row["CleanPrice"])
+        val_flt = float(row["DealValue"])
+        deals_list.append({
+            "date": str(row["DisplayDate"]),
+            "date_raw": str(row["DateFormatted"]),
+            "symbol": str(row["CleanSym"]),
+            "company": str(row["SecurityName"]),
+            "client_name": str(row["CleanClient"]),
+            "matched_hft": str(row["Matched_HFT"]) if pd.notna(row["Matched_HFT"]) else None,
+            "is_hft": bool(pd.notna(row["Matched_HFT"])),
+            "side": str(row["CleanSide"]),
+            "quantity": qty_int,
+            "quantity_formatted": f"{qty_int:,}",
+            "price": price_flt,
+            "price_formatted": f"{price_flt:,.2f}",
+            "value_cr": round(val_flt / 10000000.0, 2),
+            "value_formatted": format_inr_value(val_flt),
+            "remarks": str(row["RemarksText"])
+        })
+
+    return {
+        "client_name": matched_name,
+        "total_deals": total_deals,
+        "filtered_count": len(sub),
+        "buys_count": buys_count,
+        "sells_count": sells_count,
+        "stocks_touched": stocks_touched,
+        "total_value_cr": total_val,
+        "buy_value_cr": buy_val,
+        "sell_value_cr": sell_val,
+        "deals": deals_list
+    }
+
+
+def get_market_summary(year="2026-27", period="full"):
+    """Returns overview statistics for the header / market overview tab.
+    period: 'full' (cumulative for the FY) or 'latest' (single latest trading day).
+    """
+    df = fetch_raw_fy_df(year)
+    norm_year = normalize_fy(year)
+    min_date = df["ParsedDate"].min()
+    max_date = df["ParsedDate"].max()
+    date_range_str = f"{min_date.strftime('%B %d, %Y')} to {max_date.strftime('%B %d, %Y')}" if pd.notna(min_date) and pd.notna(max_date) else norm_year
+    latest_date_str = max_date.strftime('%d-%b-%Y') if pd.notna(max_date) else "NA"
+
+    if period == "latest" and pd.notna(max_date):
+        view_df = df[df["ParsedDate"] == max_date].copy()
+        current_period_label = f"Latest Trading Day ({latest_date_str})"
+    else:
+        view_df = df.copy()
+        current_period_label = f"Full Financial Year ({date_range_str})"
+
+    top_ents = []
+    ent_counts = view_df.groupby("CleanClient").agg(
+        deals=("CleanSym", "count"),
+        buys=("CleanSide", lambda s: (s == "BUY").sum()),
+        sells=("CleanSide", lambda s: (s == "SELL").sum()),
+        stocks=("CleanSym", "nunique"),
+        turnover_cr=("ValueCr", "sum")
+    ).reset_index().sort_values(by="deals", ascending=False).head(15)
+
+    for _, r in ent_counts.iterrows():
+        top_ents.append({
+            "name": r["CleanClient"],
+            "deals": int(r["deals"]),
+            "buys": int(r["buys"]),
+            "sells": int(r["sells"]),
+            "stocks": int(r["stocks"]),
+            "turnover_cr": round(float(r["turnover_cr"]), 2)
+        })
+
+    top_stks = []
+    stk_counts = view_df.groupby(["CleanSym", "SecurityName"]).agg(
+        deals=("CleanClient", "count"),
+        buys=("CleanSide", lambda s: (s == "BUY").sum()),
+        sells=("CleanSide", lambda s: (s == "SELL").sum()),
+        turnover_cr=("ValueCr", "sum")
+    ).reset_index().sort_values(by="deals", ascending=False).head(15)
+
+    for _, r in stk_counts.iterrows():
+        top_stks.append({
+            "symbol": r["CleanSym"],
+            "company": r["SecurityName"],
+            "deals": int(r["deals"]),
+            "buys": int(r["buys"]),
+            "sells": int(r["sells"]),
+            "turnover_cr": round(float(r["turnover_cr"]), 2)
+        })
+
+    return {
+        "year": norm_year,
+        "period": period,
+        "period_label": current_period_label,
+        "latest_date": latest_date_str,
+        "total_deals": len(view_df),
+        "total_stocks": int(view_df["CleanSym"].nunique()),
+        "total_entities": int(view_df["CleanClient"].nunique()),
+        "date_range": date_range_str,
+        "top_entities": top_ents,
+        "top_stocks": top_stks
+    }
+
+
+def get_top_hft_stocks(year="2026-27"):
+    """Returns Top 10 stocks with multiple HFT activity and Top 10 by turnover."""
+    df = fetch_raw_fy_df(year)
+    norm_year = normalize_fy(year)
+
+    # 1. Top 10 by distinct HFT desks
+    hft_only = df[df["Matched_HFT"].notna()]
+    top_by_hft = []
+    if not hft_only.empty:
+        hft_agg = hft_only.groupby(["CleanSym", "SecurityName"]).agg(
+            distinct_hfts=("Matched_HFT", "nunique"),
+            total_deals=("CleanSym", "count"),
+            buys=("CleanSide", lambda s: (s == "BUY").sum()),
+            sells=("CleanSide", lambda s: (s == "SELL").sum()),
+            turnover_cr=("ValueCr", "sum"),
+            hft_names=("Matched_HFT", lambda x: sorted(list(set(x))))
+        ).reset_index().sort_values(by=["distinct_hfts", "total_deals"], ascending=[False, False]).head(10)
+
+        for _, r in hft_agg.iterrows():
+            top_by_hft.append({
+                "symbol": r["CleanSym"],
+                "company": r["SecurityName"],
+                "distinct_hfts": int(r["distinct_hfts"]),
+                "total_deals": int(r["total_deals"]),
+                "buys": int(r["buys"]),
+                "sells": int(r["sells"]),
+                "turnover_cr": round(float(r["turnover_cr"]), 2),
+                "hft_names": r["hft_names"]
+            })
+
+    # 2. Top 10 by highest turnover
+    turnover_agg = df.groupby(["CleanSym", "SecurityName"]).agg(
+        total_deals=("CleanSym", "count"),
+        buys=("CleanSide", lambda s: (s == "BUY").sum()),
+        sells=("CleanSide", lambda s: (s == "SELL").sum()),
+        turnover_cr=("ValueCr", "sum"),
+        distinct_hfts=("Matched_HFT", lambda x: x.dropna().nunique()),
+        hft_deals=("Matched_HFT", lambda x: x.notna().sum())
+    ).reset_index().sort_values(by="turnover_cr", ascending=False).head(10)
+
+    top_by_turnover = []
+    for _, r in turnover_agg.iterrows():
+        top_by_turnover.append({
+            "symbol": r["CleanSym"],
+            "company": r["SecurityName"],
+            "total_deals": int(r["total_deals"]),
+            "buys": int(r["buys"]),
+            "sells": int(r["sells"]),
+            "turnover_cr": round(float(r["turnover_cr"]), 2),
+            "distinct_hfts": int(r["distinct_hfts"]),
+            "hft_deals": int(r["hft_deals"])
+        })
+
+    return {
+        "year": norm_year,
+        "top_by_hft_activity": top_by_hft,
+        "top_by_turnover": top_by_turnover
+    }
+
+
+def get_stock_deals(symbol_query, year="2026-27", side="ALL", client_filter=None, limit=500):
+    """Returns all deals for a specific stock ticker, including participating HFT desks."""
+    df = fetch_raw_fy_df(year)
+    if not symbol_query:
+        return {"error": "Symbol required", "deals": [], "total_deals": 0}
+
+    sym = symbol_query.strip().upper()
+    sub = df[df["CleanSym"] == sym].copy()
+
+    if sub.empty:
+        return {
+            "symbol": sym,
+            "company": sym,
+            "total_deals": 0,
+            "buys_count": 0,
+            "sells_count": 0,
+            "hft_desks_count": 0,
+            "hft_desks": [],
+            "total_turnover_cr": 0.0,
+            "buy_turnover_cr": 0.0,
+            "sell_turnover_cr": 0.0,
+            "deals": []
+        }
+
+    company_name = sub["SecurityName"].iloc[0]
+    total_deals = len(sub)
+    buys_count = int((sub["CleanSide"] == "BUY").sum())
+    sells_count = int((sub["CleanSide"] == "SELL").sum())
+    total_val = float(sub["ValueCr"].sum().round(2))
+    buy_val = float(sub[sub["CleanSide"] == "BUY"]["ValueCr"].sum().round(2))
+    sell_val = float(sub[sub["CleanSide"] == "SELL"]["ValueCr"].sum().round(2))
+
+    hft_desks_set = sorted(list(set(sub["Matched_HFT"].dropna().unique())))
+
+    if side and side.upper() in ["BUY", "SELL"]:
+        sub = sub[sub["CleanSide"] == side.upper()]
+    elif side and side.upper() == "HFT":
+        sub = sub[sub["Matched_HFT"].notna()]
+
+    if client_filter:
+        c_clean = client_filter.strip().upper()
+        sub = sub[sub["ClientUpper"].str.contains(c_clean, regex=False, na=False)]
+
+    sub["SideOrder"] = sub["CleanSide"].apply(lambda s: 0 if s == "BUY" else 1)
+    sub = sub.sort_values(by=["ParsedDate", "SideOrder"], ascending=[False, True])
+
+    deals_list = []
+    for _, row in sub.head(limit).iterrows():
+        qty_int = int(row["CleanQty"])
+        price_flt = float(row["CleanPrice"])
+        val_flt = float(row["DealValue"])
+        deals_list.append({
+            "date": str(row["DisplayDate"]),
+            "date_raw": str(row["DateFormatted"]),
+            "client_name": str(row["CleanClient"]),
+            "matched_hft": str(row["Matched_HFT"]) if row["Matched_HFT"] else None,
+            "is_hft": bool(row["Matched_HFT"]),
+            "side": str(row["CleanSide"]),
+            "quantity": qty_int,
+            "quantity_formatted": f"{qty_int:,}",
+            "price": price_flt,
+            "price_formatted": f"{price_flt:,.2f}",
+            "value_cr": round(val_flt / 10000000.0, 2),
+            "value_formatted": format_inr_value(val_flt),
+            "remarks": str(row["RemarksText"])
+        })
+
+    return {
+        "symbol": sym,
+        "company": company_name,
+        "total_deals": total_deals,
+        "filtered_count": len(sub),
+        "buys_count": buys_count,
+        "sells_count": sells_count,
+        "hft_desks_count": len(hft_desks_set),
+        "hft_desks": hft_desks_set,
+        "total_turnover_cr": total_val,
+        "buy_turnover_cr": buy_val,
+        "sell_turnover_cr": sell_val,
+        "deals": deals_list
+    }
+
+
+def generate_pinescript(grouped, selected_syms=None, year="2026-27"):
+    norm_year = normalize_fy(year)
+    indicator_title = f"HFT Tracker [{norm_year}]"
+
     # Fallback to Azure Blob / local watchlist if no explicit symbols were selected
     if not selected_syms:
         wl = fetch_watchlist()
@@ -200,15 +692,13 @@ def generate_pinescript(grouped, selected_syms=None):
     if selected_syms and "ALL" not in [s.upper() for s in selected_syms]:
         selected_set = set(s.upper() for s in selected_syms)
         filtered_group = grouped[grouped["CleanSym"].isin(selected_set)]
-        title_tag = f"({', '.join(sorted(selected_set))})"
     else:
         filtered_group = grouped
-        title_tag = "(All Tracked Stocks)"
 
     symbols_in_data = sorted(filtered_group["CleanSym"].unique().tolist())
     if not symbols_in_data:
         return f"""//@version=5
-indicator("HFT + V20 Confluence Engine {title_tag}", overlay=true)
+indicator("{indicator_title}", overlay=true)
 // No HFT bulk BUY deals found for the selected symbols.
 """
 
@@ -238,7 +728,7 @@ indicator("HFT + V20 Confluence Engine {title_tag}", overlay=true)
     data_loading_block = "\n".join(stock_branches)
 
     script = f"""//@version=5
-indicator("HFT + V20 Confluence Engine {title_tag}", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
+indicator("{indicator_title}", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=500)
 
 // ================================================================
 // 1. CONFIGURATION & INPUTS
@@ -691,6 +1181,23 @@ if showDashboard and barstate.islast
 
 
 class handler(BaseHTTPRequestHandler):
+    def _send_json(self, data, status=200):
+        body = json.dumps(data, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        self.end_headers()
+
     def do_GET(self):
         try:
             parsed_path = urllib.parse.urlparse(self.path)
@@ -705,8 +1212,88 @@ class handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 return
 
-            # Watchlist Management Actions (Stored permanently on Azure Blob & local watchlist.csv)
             action = query_params.get("action", [None])[0]
+            selected_year = normalize_fy(query_params.get("year", ["2026-27"])[0])
+
+            # 1. Available Financial Years
+            if action == "years":
+                years_data = [
+                    {
+                        "id": "2026-27",
+                        "label": "FY 2026-27 (01-Apr-2026 to 31-Mar-2027)",
+                        "short": "2026-27",
+                        "is_current": True,
+                        "file": "2026-27.csv"
+                    },
+                    {
+                        "id": "2025-26",
+                        "label": "FY 2025-26 (01-Apr-2025 to 31-Mar-2026)",
+                        "short": "2025-26",
+                        "is_current": False,
+                        "file": "2025-26.csv"
+                    }
+                ]
+                self._send_json({"status": "success", "years": years_data, "default_year": "2026-27"})
+                return
+
+            # 2. Market Overview Summary
+            if action == "market_summary":
+                period_param = query_params.get("period", ["full"])[0]
+                summary = get_market_summary(selected_year, period=period_param)
+                self._send_json({"status": "success", **summary})
+                return
+
+            # 3. HFT Entities list for dropdown
+            if action == "hft_entities":
+                search_q = query_params.get("q", [None])[0]
+                entities = get_hft_entities_summary(selected_year, search_q=search_q)
+                self._send_json({
+                    "status": "success",
+                    "year": selected_year,
+                    "count": len(entities),
+                    "entities": entities
+                })
+                return
+
+            # 4. HFT Deals for a specific client entity (Includes Buy & Sell)
+            if action == "hft_deals":
+                client_q = query_params.get("client", query_params.get("name", [""]))[0]
+                side_filter = query_params.get("side", ["ALL"])[0]
+                stock_filter = query_params.get("symbol", query_params.get("stock", [None]))[0]
+                limit_param = int(query_params.get("limit", [5000])[0])
+                deals_data = get_hft_deals(
+                    client_query=client_q,
+                    year=selected_year,
+                    side=side_filter,
+                    stock_filter=stock_filter,
+                    limit=limit_param
+                )
+                self._send_json({"status": "success", "year": selected_year, **deals_data})
+                return
+
+            # 4b. Top 10 Stocks by Multiple HFT Activity & Highest Turnover
+            if action == "top_hft_stocks":
+                stocks_summary = get_top_hft_stocks(selected_year)
+                self._send_json({"status": "success", **stocks_summary})
+                return
+
+            # 4c. Deals for a specific Stock Symbol (e.g. IFCI, ANTELOPUS, JINDRILL)
+            if action == "stock_deals":
+                stock_sym = query_params.get("symbol", query_params.get("stock", [""]))[0]
+                side_filter = query_params.get("side", ["ALL"])[0]
+                client_filter = query_params.get("client", [None])[0]
+                limit_param = int(query_params.get("limit", [5000])[0])
+                deals_data = get_stock_deals(
+                    symbol_query=stock_sym,
+                    year=selected_year,
+                    side=side_filter,
+                    client_filter=client_filter,
+                    limit=limit_param
+                )
+                self._send_json({"status": "success", "year": selected_year, **deals_data})
+                return
+
+            # 5. Watchlist Management Actions
             if action == "watchlist":
                 wl = sorted(list(fetch_watchlist() or []))
                 data = {
@@ -715,12 +1302,7 @@ class handler(BaseHTTPRequestHandler):
                     "count": len(wl),
                     "storage": "azure_blob" if os.environ.get("AZURE_STORAGE_CONNECTION_STRING") or os.environ.get("AZURE_SAS_TOKEN") else "local"
                 }
-                body = json.dumps(data).encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.end_headers()
-                self.wfile.write(body)
+                self._send_json(data)
                 return
 
             if action == "watchlist_add":
@@ -735,12 +1317,7 @@ class handler(BaseHTTPRequestHandler):
                     "count": len(current_wl),
                     "saved_to": save_res.get("storage", "local")
                 }
-                body = json.dumps(data).encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.end_headers()
-                self.wfile.write(body)
+                self._send_json(data)
                 return
 
             if action == "watchlist_remove":
@@ -755,12 +1332,7 @@ class handler(BaseHTTPRequestHandler):
                     "count": len(current_wl),
                     "saved_to": save_res.get("storage", "local")
                 }
-                body = json.dumps(data).encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.end_headers()
-                self.wfile.write(body)
+                self._send_json(data)
                 return
 
             if action == "watchlist_clear":
@@ -771,19 +1343,16 @@ class handler(BaseHTTPRequestHandler):
                     "count": 0,
                     "saved_to": save_res.get("storage", "local")
                 }
-                body = json.dumps(data).encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.end_headers()
-                self.wfile.write(body)
+                self._send_json(data)
                 return
 
-            grouped = fetch_and_process_hft_data()
-            all_symbols = sorted(grouped["CleanSym"].unique().tolist())
+            # 6. Stocks list with summaries for Pine Script and Watchlist
+            raw_df = fetch_raw_fy_df(selected_year)
+            all_market_symbols = sorted(raw_df["CleanSym"].dropna().unique().tolist())
+            grouped = fetch_and_process_hft_data(selected_year)
+            hft_symbols = sorted(grouped["CleanSym"].unique().tolist())
 
-            # Return list of symbols and summaries for the frontend
-            if query_params.get("action") == ["symbols"] or "symbols" not in query_params and "symbol" not in query_params and "application/json" in accept_header:
+            if action == "symbols" or ("symbols" not in query_params and "symbol" not in query_params and "application/json" in accept_header):
                 summaries = {}
                 for sym, g in grouped.groupby("CleanSym"):
                     desks_set = sorted(list(set(d for desks in g["Matched_HFT"] for d in desks)))
@@ -791,24 +1360,23 @@ class handler(BaseHTTPRequestHandler):
                         "deals": len(g),
                         "desks_count": len(desks_set),
                         "desks": desks_set,
-                        "latest_date": g["ParsedDate"].max().strftime("%d-%b-%Y"),
-                        "first_date": g["ParsedDate"].min().strftime("%d-%b-%Y"),
+                        "latest_date": g["ParsedDate"].max().strftime("%d-%b-%Y") if pd.notna(g["ParsedDate"].max()) else "NA",
+                        "first_date": g["ParsedDate"].min().strftime("%d-%b-%Y") if pd.notna(g["ParsedDate"].min()) else "NA",
+                        "is_hft": True
                     }
                 response_data = {
                     "status": "success",
-                    "count": len(all_symbols),
-                    "symbols": all_symbols,
+                    "year": selected_year,
+                    "count": len(all_market_symbols),
+                    "symbols": all_market_symbols,
+                    "hft_count": len(hft_symbols),
+                    "hft_symbols": hft_symbols,
                     "summaries": summaries,
                 }
-                body = json.dumps(response_data).encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "application/json; charset=utf-8")
-                self.send_header("Access-Control-Allow-Origin", "*")
-                self.end_headers()
-                self.wfile.write(body)
+                self._send_json(response_data)
                 return
 
-            # Pine Script generation for selected symbols
+            # 7. Pine Script generation for selected symbols
             selected_syms = None
             if "symbols" in query_params:
                 raw = query_params["symbols"][0]
@@ -816,7 +1384,7 @@ class handler(BaseHTTPRequestHandler):
             elif "symbol" in query_params:
                 selected_syms = [s.strip().upper() for s in query_params["symbol"][0].split(",") if s.strip()]
 
-            script_text = generate_pinescript(grouped, selected_syms)
+            script_text = generate_pinescript(grouped, selected_syms, year=selected_year)
 
             self.send_response(200)
             self.send_header("Content-Type", "text/plain; charset=utf-8")

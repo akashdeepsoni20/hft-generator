@@ -3,3 +3,6 @@ __pycache__/
 .env
 watchlist.xlsx
 watchlist.csv
+Stargey.txt
+*Strategy*.txt
+*strategy*.txt
