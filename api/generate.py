@@ -741,6 +741,7 @@ maLength              = input.int(200,    title="SMA Length", group=grp_v20)
 useCloseForExit       = input.bool(false, title="Use Close for Target Exit (vs High)?", group=grp_v20)
 rectOpacity           = input.int(20,     title="Streak Box Opacity (0-100)", group=grp_v20)
 v20ProximityThreshold = input.float(4.0,  title="Radar Proximity Threshold %", group=grp_v20)
+v20TolerancePct       = input.float(1.5,  title="Pullback Entry Tolerance %", minval=0.0, maxval=5.0, step=0.5, group=grp_v20, tooltip="Allows entry if price tests within this % above the base support level (e.g. 1.5% buffer).")
 maxLineAgeYears       = input.int(2,      title="Max Setup Age (Years)", group=grp_v20)
 env_lookback_years    = input.int(10,     title="Backtest Lookback Window (Years)", minval=1, maxval=25, group=grp_v20)
 
@@ -968,7 +969,8 @@ if totalV20Setups > 0
         // Pullback Entry Trigger
         if not inTrade and not isDone and (fTime >= globalCutoffTime) and (time > fTime)
             bool triggerAllowed = not requireHftOnTrigger or isHftToday
-            if low <= entryLvl and triggerAllowed
+            float maxEntryZone = entryLvl * (1.0 + (v20TolerancePct / 100.0))
+            if low <= maxEntryZone and triggerAllowed
                 array.set(v20_active, i, true)
                 array.set(v20_trigTimes, i, time)
                 tTime   := time
